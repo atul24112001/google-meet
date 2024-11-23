@@ -15,13 +15,13 @@ type SigninPayload struct {
 
 func Signin(w http.ResponseWriter, r *http.Request) {
 	var body SigninPayload
-	if err := lib.ReadJsonFromBody(w, r, body); err != nil {
+	if err := lib.ReadJsonFromBody(w, r, &body); err != nil {
 		lib.ErrorJson(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	var user model.User
-	if err := lib.Pool.QueryRow(r.Context(), "SELECT (id, name, email, password) FROM public.users WHERE email =  $1", body.Email).Scan(&user.Id, &user.Name, &user.Email, &user.Password); err != nil {
+	if err := lib.Pool.QueryRow(r.Context(), "SELECT id, name, email, password FROM public.users WHERE email =  $1", body.Email).Scan(&user.Id, &user.Name, &user.Email, &user.Password); err != nil {
 		if err == pgx.ErrNoRows {
 			lib.ErrorJson(w, http.StatusUnauthorized, "No user found with this email")
 			return

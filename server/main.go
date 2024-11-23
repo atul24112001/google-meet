@@ -45,6 +45,6 @@ func main() {
 	}
 
 	if err := server.ListenAndServe(); err != nil {
-		log.Fatal("Something went wrong while starting server")
+		log.Fatal("Something went wrong while starting server: ", err.Error())
 	}
 }

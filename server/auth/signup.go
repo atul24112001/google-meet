@@ -3,6 +3,7 @@ package auth
 import (
 	"google-meet/lib"
 	"google-meet/model"
+	"log"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -11,16 +12,16 @@ import (
 type SignupPayload struct {
 	Name     string `json:"name"`
 	Email    string `json:"email"`
-	Password string `json:"Password"`
+	Password string `json:"password"`
 }
 
 func Signup(w http.ResponseWriter, r *http.Request) {
 	var body SignupPayload
-	if err := lib.ReadJsonFromBody(w, r, body); err != nil {
+	if err := lib.ReadJsonFromBody(w, r, &body); err != nil {
 		lib.ErrorJson(w, http.StatusBadRequest, err.Error())
 		return
 	}
-
+	log.Println("Password length", len(body.Password), body)
 	if len(body.Password) < 8 || len(body.Password) > 15 {
 		lib.ErrorJson(w, http.StatusInternalServerError, "Password's length should be between 8 to 15")
 		return
@@ -36,7 +37,7 @@ func Signup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := lib.Pool.QueryRow(r.Context(), "INSERT INTO public.users (id, name, email, password) VALUES ($1, $2, $3, $4) RETURNING (id, name, email, password)", userId.String(), body.Name, body.Email, password).Scan(&user.Id, &user.Name, &user.Email, &user.Password); err != nil {
+	if err := lib.Pool.QueryRow(r.Context(), "INSERT INTO public.users (id, name, email, password) VALUES ($1, $2, $3, $4) RETURNING id, name, email, password", userId.String(), body.Name, body.Email, password).Scan(&user.Id, &user.Name, &user.Email, &user.Password); err != nil {
 		lib.ErrorJson(w, http.StatusInternalServerError, err.Error())
 		return
 	}

@@ -7,7 +7,7 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model user {
+model User {
   id        String   @id @default(uuid())
   name      String
   email     String   @unique
@@ -15,14 +15,14 @@ model user {
   otp       String?
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
-  meet      meet[]
+  meet      Meet[]
 
   @@map("users")
 }
 
-model meet {
+model Meet {
   id        String   @id @default(uuid())
-  user      user     @relation(fields: [userId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
   userId    String
   startsAt  DateTime
   createdAt DateTime @default(now())

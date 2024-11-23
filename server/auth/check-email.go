@@ -14,7 +14,7 @@ type CheckEmailPayload struct {
 
 func CheckEmail(w http.ResponseWriter, r *http.Request) {
 	var body CheckEmailPayload
-	if err := lib.ReadJsonFromBody(w, r, body); err != nil {
+	if err := lib.ReadJsonFromBody(w, r, &body); err != nil {
 		lib.ErrorJson(w, http.StatusBadRequest, err.Error())
 		return
 	}
