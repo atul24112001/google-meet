@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"google-meet/lib"
 	"google-meet/middleware"
+	"google-meet/model"
 	"net/http"
 
 	"github.com/gorilla/mux"
@@ -17,9 +18,9 @@ func GetMeetDetails(w http.ResponseWriter, r *http.Request) {
 	}
 
 	params := mux.Vars(r)
-	roomId := params["roomId"]
+	meetId := params["meetId"]
 
-	cmd := lib.RedisClient.Get(r.Context(), fmt.Sprintf("google-meet-room:%s", roomId))
+	cmd := lib.RedisClient.Get(r.Context(), fmt.Sprintf("google-meet-room:%s", meetId))
 	wssUrl := "wss://meet.atulmorchhlay.com/ws"
 	err = cmd.Err()
 	if err == nil {
@@ -29,11 +30,18 @@ func GetMeetDetails(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	var meet model.Meet
+	err = lib.Pool.QueryRow(r.Context(), `SELECT id, "userId" FROM public.meets WHERE id = $1`, meetId).Scan(&meet.Id, &meet.UserId)
+	if err != nil {
+		lib.ErrorJson(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 	lib.WriteJson(w, http.StatusOK, map[string]interface{}{
 		"message": "success",
 		"data": map[string]string{
-			"roomId": roomId,
+			"meetId": meetId,
 			"wss":    wssUrl,
+			"hostId": meet.UserId,
 		},
 	})
 }

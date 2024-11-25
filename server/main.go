@@ -29,7 +29,7 @@ func main() {
 	r.Methods("POST").Path("/api/v1/auth/check").HandlerFunc(auth.CheckEmail)
 	r.Methods("GET").Path("/api/v1/auth/me").HandlerFunc(auth.VerifyToken)
 	r.Methods("POST").Path("/api/v1/meet").HandlerFunc(meet.CreateMeet)
-	r.Methods("GET").Path("/api/v1/meet/{id}").HandlerFunc(meet.GetMeetDetails)
+	r.Methods("GET").Path("/api/v1/meet/{meetId}").HandlerFunc(meet.GetMeetDetails)
 
 	corsHandler := handlers.CORS(
 		handlers.AllowedOrigins([]string{"http://localhost:3000"}),

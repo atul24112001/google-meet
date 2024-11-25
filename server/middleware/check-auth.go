@@ -40,7 +40,7 @@ func CheckAuth(r *http.Request) (model.User, error) {
 		return model.User{}, errors.New("unauthorized")
 	}
 	var user model.User
-	err = lib.Pool.QueryRow(r.Context(), `SELECT id, name, email, password FROM public.users WHERE id = $1`, claims.Id).Scan(&user.Id, &user.Name, &user.Email)
+	err = lib.Pool.QueryRow(r.Context(), `SELECT id, name, email FROM public.users WHERE id = $1`, claims.Id).Scan(&user.Id, &user.Name, &user.Email)
 	if err != nil {
 		log.Println(err.Error())
 		return model.User{}, errors.New("internal server error")

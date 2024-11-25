@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { User } from "@/types";
 import axios, { AxiosError, AxiosInstance } from "axios";
+import { setCookie } from "cookies-next";
 import {
   ChangeEvent,
   createContext,
@@ -66,20 +67,25 @@ export const AuthContextProvider = ({ children }: PropsWithChildren) => {
     });
   }, [token]);
 
-  const tryCatchWrapper = async (action: () => Promise<void>) => {
+  const tryCatchWrapper = async (
+    action: () => Promise<void>,
+    notify?: boolean
+  ) => {
     setAuthenticating(true);
     let success = true;
     try {
       await action();
     } catch (error) {
-      toast({
-        title: "Something went wrong",
-        description:
-          error instanceof AxiosError
-            ? error.response?.data?.message
-            : (error as Error).message,
-        variant: "destructive",
-      });
+      if (notify) {
+        toast({
+          title: "Something went wrong",
+          description:
+            error instanceof AxiosError
+              ? error.response?.data?.message
+              : (error as Error).message,
+          variant: "destructive",
+        });
+      }
       success = false;
     }
     setAuthenticating(false);
@@ -99,15 +105,15 @@ export const AuthContextProvider = ({ children }: PropsWithChildren) => {
     setIsAuthenticated(true);
     setUser(data.data);
     setToken(data.token);
+    setCookie("token", data.token);
     localStorage.setItem("token", data.token);
-    toggleShowAuthDialog();
   };
 
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (token) {
       (async () => {
-        await tryCatchWrapper(async () => {
+        const success = await tryCatchWrapper(async () => {
           const { data } = await axios.get(
             `${process.env.NEXT_PUBLIC_API_URL}/api/v1/auth/me`,
             {
@@ -119,6 +125,9 @@ export const AuthContextProvider = ({ children }: PropsWithChildren) => {
           data.token = token;
           authenticateHandler(data);
         });
+        if (!success) {
+          localStorage.removeItem("token");
+        }
       })();
     }
   }, []);
@@ -130,7 +139,8 @@ export const AuthContextProvider = ({ children }: PropsWithChildren) => {
         password,
       });
       authenticateHandler(data);
-    });
+      toggleShowAuthDialog();
+    }, true);
   };
 
   const signup = async (email: string, password: string, name: string) => {
@@ -141,7 +151,8 @@ export const AuthContextProvider = ({ children }: PropsWithChildren) => {
         name,
       });
       authenticateHandler(data);
-    });
+      toggleShowAuthDialog();
+    }, true);
   };
 
   const authenticate = async (
