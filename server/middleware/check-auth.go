@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"google-meet/lib"
 	"google-meet/model"
+	"google-meet/query"
 	"log"
 	"net/http"
 	"os"
@@ -39,8 +40,7 @@ func CheckAuth(r *http.Request) (model.User, error) {
 	if !token.Valid {
 		return model.User{}, errors.New("unauthorized")
 	}
-	var user model.User
-	err = lib.Pool.QueryRow(r.Context(), `SELECT id, name, email FROM public.users WHERE id = $1`, claims.Id).Scan(&user.Id, &user.Name, &user.Email)
+	user, err := query.GetUserById(r.Context(), claims.Id)
 	if err != nil {
 		log.Println(err.Error())
 		return model.User{}, errors.New("internal server error")

@@ -5,6 +5,7 @@ import (
 	"google-meet/auth"
 	"google-meet/lib"
 	"google-meet/meet"
+	"google-meet/ws"
 	"log"
 	"net/http"
 	"os"
@@ -24,6 +25,7 @@ func main() {
 
 	r := mux.NewRouter()
 
+	r.HandleFunc("/websocket", ws.WebsocketHandler)
 	r.Methods("POST").Path("/api/v1/auth/signup").HandlerFunc(auth.Signup)
 	r.Methods("POST").Path("/api/v1/auth/signin").HandlerFunc(auth.Signin)
 	r.Methods("POST").Path("/api/v1/auth/check").HandlerFunc(auth.CheckEmail)

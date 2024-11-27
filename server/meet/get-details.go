@@ -6,6 +6,7 @@ import (
 	"google-meet/middleware"
 	"google-meet/model"
 	"net/http"
+	"time"
 
 	"github.com/gorilla/mux"
 )
@@ -36,6 +37,8 @@ func GetMeetDetails(w http.ResponseWriter, r *http.Request) {
 		lib.ErrorJson(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+
+	lib.RedisClient.Set(r.Context(), fmt.Sprintf("meet-%s", meetId), meet.UserId, time.Hour*24)
 	lib.WriteJson(w, http.StatusOK, map[string]interface{}{
 		"message": "success",
 		"data": map[string]string{
