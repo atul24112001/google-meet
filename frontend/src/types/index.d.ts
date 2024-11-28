@@ -1,4 +1,4 @@
-import { user } from "@prisma/client";
+import { User as user } from "@prisma/client";
 
 interface User extends user {}
 

@@ -15,7 +15,7 @@ type Connection struct {
 	// lock for PeerConnections and TrackLocals
 	ListLock        sync.RWMutex
 	TrackLocals     map[string]*webrtc.TrackLocalStaticRTP
-	PeerConnections map[string]PeerConnectionState
+	PeerConnections map[string]*PeerConnectionState
 }
 
 var connections = map[string]*Connection{}

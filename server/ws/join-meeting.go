@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"google-meet/lib"
 	"google-meet/query"
+	"log"
 	"os"
 	"sync"
 	"time"
@@ -40,19 +41,18 @@ func JoinMeeting(ctx context.Context, conn *threadSafeWriter, message WebsocketM
 	users[claims.Id] = conn
 	wsUserMap[conn.Conn] = claims.Id
 
-	cmd := lib.RedisClient.Get(ctx, fmt.Sprintf("meet-%s", joinMeetingPayload.MeetingId))
-	hostId, err := cmd.Result()
-	if cmd.Err() != nil || err != nil {
-		if err := lib.Pool.QueryRow(ctx, `SELECT "userId" FROM public.meets WHERE id = $1`, joinMeetingPayload.MeetingId).Scan(&hostId); err != nil {
-			users[claims.Id].WriteJSON(map[string]interface{}{
-				"event":   "error",
-				"message": "Something went wrong while fetching meeting details",
-			})
-		}
+	meet, err := query.GetMeetingById(ctx, joinMeetingPayload.MeetingId)
+	if err != nil {
+		logger.Errorf("Something went wrong while fetching meeting details: %v", err)
+		users[claims.Id].WriteJSON(map[string]interface{}{
+			"event":   "error",
+			"message": "Something went wrong while fetching meeting details",
+		})
+		return
 	}
 
-	if hostId != claims.Id {
-		host, hostExist := users[hostId]
+	if meet.UserId != claims.Id {
+		host, hostExist := users[meet.UserId]
 		if !hostExist {
 			conn.WriteJSON(map[string]interface{}{
 				"event":   "error",
@@ -69,7 +69,7 @@ func JoinMeeting(ctx context.Context, conn *threadSafeWriter, message WebsocketM
 			return
 		}
 		err = host.WriteJSON(map[string]interface{}{
-			"type": "request-participant-join",
+			"event": "request-participant-join",
 			"data": map[string]interface{}{
 				"userId": user.Id,
 				"name":   user.Name,
@@ -92,10 +92,10 @@ func JoinMeeting(ctx context.Context, conn *threadSafeWriter, message WebsocketM
 		// }
 		return
 	}
-	JoinMeetingRequestHandler(ctx, joinMeetingPayload.MeetingId, claims.Id)
+	JoinMeetingRequestHandler(ctx, joinMeetingPayload.MeetingId, claims.Id, joinMeetingPayload.Audio, joinMeetingPayload.Video)
 }
 
-func JoinMeetingRequestHandler(ctx context.Context, meetingId string, userId string) {
+func JoinMeetingRequestHandler(ctx context.Context, meetingId string, userId string, audio bool, video bool) {
 	user, exist := users[userId]
 	if !exist {
 		return
@@ -108,7 +108,7 @@ func JoinMeetingRequestHandler(ctx context.Context, meetingId string, userId str
 		})
 		return
 	}
-	defer peerConnection.Close()
+	// defer peerConnection.Close()
 
 	for _, typ := range []webrtc.RTPCodecType{webrtc.RTPCodecTypeVideo, webrtc.RTPCodecTypeAudio} {
 		if _, err := peerConnection.AddTransceiverFromKind(typ, webrtc.RTPTransceiverInit{
@@ -121,20 +121,29 @@ func JoinMeetingRequestHandler(ctx context.Context, meetingId string, userId str
 			return
 		}
 	}
-	connection, connectionExist := connections[meetingId]
+	_, connectionExist := connections[meetingId]
 	if !connectionExist {
-		connection = &Connection{
+		log.Println("userId-PeerConnections", userId)
+		connections[meetingId] = &Connection{
 			ListLock:        sync.RWMutex{},
 			TrackLocals:     map[string]*webrtc.TrackLocalStaticRTP{},
-			PeerConnections: map[string]PeerConnectionState{},
+			PeerConnections: map[string]*PeerConnectionState{},
 		}
 	}
 
-	connections[meetingId] = connection
+	meeting, meetingExist := connections[meetingId]
+	if !meetingExist {
+		SendMessage(userId, map[string]interface{}{
+			"event":   "error",
+			"message": fmt.Sprintf("Meeting not found while joining meet: %s", meetingId),
+		})
+		return
+	}
 
-	connections[meetingId].ListLock.Lock()
-	connections[meetingId].PeerConnections[userId] = PeerConnectionState{peerConnection, user}
-	connections[meetingId].ListLock.Unlock()
+	meeting.ListLock.Lock()
+	meeting.PeerConnections[userId] = &PeerConnectionState{peerConnection, user}
+	// log.Println("userId-PeerConnections", userId, )
+	meeting.ListLock.Unlock()
 
 	peerConnection.OnICECandidate(func(i *webrtc.ICECandidate) {
 		if i == nil {
@@ -168,23 +177,29 @@ func JoinMeetingRequestHandler(ctx context.Context, meetingId string, userId str
 				logger.Errorf("Failed to close PeerConnection: %v", err)
 			}
 		case webrtc.PeerConnectionStateClosed:
-			signalPeerConnections(meetingId, userId)
+			signalPeerConnections(meetingId, userId, audio, video)
 		default:
 		}
 	})
 
 	peerConnection.OnTrack(func(tr *webrtc.TrackRemote, r *webrtc.RTPReceiver) {
-		TrackHandler(tr, meetingId, userId)
+		TrackHandler(tr, meetingId, userId, audio, video)
 	})
 
 	peerConnection.OnICEConnectionStateChange(func(is webrtc.ICEConnectionState) {
 		logger.Infof("ICE connection state changed: %s meedId=%s", is, meetingId)
 	})
 
-	signalPeerConnections(meetingId, userId)
+	signalPeerConnections(meetingId, userId, audio, video)
+	SendMessage(userId, map[string]interface{}{
+		"event": "joining-meeting",
+		"data": map[string]interface{}{
+			"meetingId": meetingId,
+		},
+	})
 }
 
-func signalPeerConnections(meetingId string, userId string) {
+func signalPeerConnections(meetingId string, userId string, audio bool, video bool) {
 	meeting, exist := connections[meetingId]
 	if !exist {
 		return
@@ -198,7 +213,8 @@ func signalPeerConnections(meetingId string, userId string) {
 	attemptSync := func() (tryAgain bool) {
 		for participantId := range meeting.PeerConnections {
 			if meeting.PeerConnections[participantId].PeerConnection.ConnectionState() == webrtc.PeerConnectionStateClosed {
-				delete(meeting.PeerConnections, participantId)
+				// log.Println("deleting participant")
+				// delete(meeting.PeerConnections, participantId)
 				return true
 			}
 
@@ -243,7 +259,10 @@ func signalPeerConnections(meetingId string, userId string) {
 				return true
 			}
 
-			offerString, err := json.Marshal(offer)
+			offerString, err := json.Marshal(map[string]interface{}{
+				"offer":  offer,
+				"userId": userId,
+			})
 			if err != nil {
 				logger.Errorf("Failed to marshal offer to json: %v", err)
 				return true
@@ -266,7 +285,7 @@ func signalPeerConnections(meetingId string, userId string) {
 			// Release the lock and attempt a sync in 3 seconds. We might be blocking a RemoveTrack or AddTrack
 			go func() {
 				time.Sleep(time.Second * 3)
-				signalPeerConnections(meetingId, userId)
+				signalPeerConnections(meetingId, userId, audio, video)
 			}()
 			return
 		}
@@ -299,11 +318,15 @@ func dispatchKeyFrame(meeting *Connection) {
 type JoinMeetingPayload struct {
 	MeetingId string `json:"meetingId"`
 	Token     string `json:"token"`
+	Audio     bool   `json:"audio"`
+	Video     bool   `json:"video"`
 }
 
 type JoinMeetingRequest struct {
-	MeetingId string
-	UserId    string
-	Name      string
-	Email     string
+	MeetingId string `json:"meetingId"`
+	UserId    string `json:"userId"`
+	Name      string `json:"name"`
+	Email     string `json:"email"`
+	Audio     bool   `json:"audio"`
+	Video     bool   `json:"video"`
 }

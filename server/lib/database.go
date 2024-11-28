@@ -14,7 +14,7 @@ var RedisClient *redis.Client
 
 func ConnectDb(ctx context.Context) {
 	var err error = nil
-	Pool, err = pgx.Connect(ctx, os.Getenv("DATABASE_URL"))
+	Pool, err = pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
 	if err != nil {
 		log.Fatal("Error connecting database")
 	}

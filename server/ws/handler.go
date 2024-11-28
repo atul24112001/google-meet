@@ -37,12 +37,14 @@ func WebsocketHandler(w http.ResponseWriter, r *http.Request) {
 			logger.Errorf("Failed to read message: %v", err)
 			userId := wsUserMap[c.Conn]
 			delete(users, userId)
+			Disconnect(userId)
 			return
 		}
 
 		logger.Infof("Got message: %s", raw)
 
 		if err := json.Unmarshal(raw, &message); err != nil {
+
 			logger.Errorf("Failed to unmarshal json to message: %v", err)
 			return
 		}
@@ -53,8 +55,8 @@ func WebsocketHandler(w http.ResponseWriter, r *http.Request) {
 		case "accept-join-request":
 			var data JoinMeetingRequest
 			err := json.Unmarshal([]byte(message.Data), &data)
-			if err != nil {
-				JoinMeetingRequestHandler(r.Context(), data.MeetingId, data.UserId)
+			if err == nil {
+				JoinMeetingRequestHandler(r.Context(), data.MeetingId, data.UserId, data.Audio, data.Video)
 			}
 		case "candidate":
 			userId, exist := wsUserMap[c.Conn]

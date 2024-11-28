@@ -20,7 +20,7 @@ export default function ClientHomePage() {
 
   const startInstantMeeting = async () => {
     const { data } = await apiClient.post("/meet");
-    router.push(`/${data.data.id}`);
+    router.push(`/${data.data.meetId}`);
   };
 
   return (

@@ -1,10 +1,12 @@
 package meet
 
 import (
+	"encoding/json"
 	"fmt"
 	"google-meet/lib"
 	"google-meet/middleware"
-	"google-meet/model"
+	"google-meet/query"
+	"log"
 	"net/http"
 	"time"
 
@@ -14,6 +16,7 @@ import (
 func GetMeetDetails(w http.ResponseWriter, r *http.Request) {
 	_, err := middleware.CheckAuth(r)
 	if err != nil {
+		log.Println("19", err.Error())
 		lib.ErrorJson(w, 403, err.Error())
 		return
 	}
@@ -21,29 +24,34 @@ func GetMeetDetails(w http.ResponseWriter, r *http.Request) {
 	params := mux.Vars(r)
 	meetId := params["meetId"]
 
-	cmd := lib.RedisClient.Get(r.Context(), fmt.Sprintf("google-meet-room:%s", meetId))
-	wssUrl := "wss://meet.atulmorchhlay.com/ws"
-	err = cmd.Err()
-	if err == nil {
-		url, err := cmd.Result()
-		if err == nil {
-			wssUrl = url
-		}
-	}
+	// cmd := lib.RedisClient.Get(r.Context(), fmt.Sprintf("google-meet-room:%s", meetId))
+	// wssUrl := "wss://meet.atulmorchhlay.com/ws"
+	// err = cmd.Err()
+	// if err == nil {
+	// 	url, err := cmd.Result()
+	// 	if err == nil {
+	// 		wssUrl = url
+	// 	}
+	// }
 
-	var meet model.Meet
-	err = lib.Pool.QueryRow(r.Context(), `SELECT id, "userId" FROM public.meets WHERE id = $1`, meetId).Scan(&meet.Id, &meet.UserId)
+	// var meet model.Meet
+	// err = lib.Pool.QueryRow(r.Context(), `SELECT id, "userId" FROM public.meets WHERE id = $1`, meetId).Scan(&meet.Id, &meet.UserId)
+	meet, err := query.GetMeetingById(r.Context(), meetId)
 	if err != nil {
+		log.Println("40", err.Error())
 		lib.ErrorJson(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	lib.RedisClient.Set(r.Context(), fmt.Sprintf("meet-%s", meetId), meet.UserId, time.Hour*24)
+	if meetingBytes, err := json.Marshal(meet); err != nil {
+		log.Println("46", err.Error())
+		lib.RedisClient.Set(r.Context(), fmt.Sprintf("meet-%s", meetId), string(meetingBytes), time.Hour*24)
+	}
 	lib.WriteJson(w, http.StatusOK, map[string]interface{}{
 		"message": "success",
 		"data": map[string]string{
 			"meetId": meetId,
-			"wss":    wssUrl,
+			// "wss":    wssUrl,
 			"hostId": meet.UserId,
 		},
 	})

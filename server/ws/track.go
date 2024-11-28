@@ -5,11 +5,11 @@ import (
 	"github.com/pion/webrtc/v4"
 )
 
-func TrackHandler(tr *webrtc.TrackRemote, meetingId string, userId string) {
+func TrackHandler(tr *webrtc.TrackRemote, meetingId string, userId string, audio bool, video bool) {
 	logger.Infof("Got remote track: MeetId=%s Kind=%s, ID=%s, PayloadType=%d", meetingId, tr.Kind(), tr.ID(), tr.PayloadType())
 
-	trackLocal := addTrack(tr, meetingId, userId)
-	defer removeTrack(trackLocal, meetingId, userId)
+	trackLocal := addTrack(tr, meetingId, userId, audio, video)
+	defer removeTrack(trackLocal, meetingId, userId, audio, video)
 
 	buf := make([]byte, 1500)
 	rtpPkt := &rtp.Packet{}
@@ -35,13 +35,13 @@ func TrackHandler(tr *webrtc.TrackRemote, meetingId string, userId string) {
 }
 
 // Add to list of tracks and fire renegotation for all PeerConnections
-func addTrack(t *webrtc.TrackRemote, meetingId string, userId string) *webrtc.TrackLocalStaticRTP {
+func addTrack(t *webrtc.TrackRemote, meetingId string, userId string, audio bool, video bool) *webrtc.TrackLocalStaticRTP {
 	meeting := connections[meetingId]
 
 	meeting.ListLock.Lock()
 	defer func() {
 		meeting.ListLock.Unlock()
-		signalPeerConnections(meetingId, userId)
+		signalPeerConnections(meetingId, userId, audio, video)
 	}()
 
 	// Create a new TrackLocal with the same codec as our incoming
@@ -55,12 +55,12 @@ func addTrack(t *webrtc.TrackRemote, meetingId string, userId string) *webrtc.Tr
 }
 
 // Remove from list of tracks and fire renegotation for all PeerConnections
-func removeTrack(t *webrtc.TrackLocalStaticRTP, meetingId string, userId string) {
+func removeTrack(t *webrtc.TrackLocalStaticRTP, meetingId string, userId string, audio bool, video bool) {
 	meeting := connections[meetingId]
 	meeting.ListLock.Lock()
 	defer func() {
 		meeting.ListLock.Unlock()
-		signalPeerConnections(meetingId, userId)
+		signalPeerConnections(meetingId, userId, audio, video)
 	}()
 
 	delete(meeting.TrackLocals, t.ID())

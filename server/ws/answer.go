@@ -2,6 +2,7 @@ package ws
 
 import (
 	"encoding/json"
+	"log"
 
 	"github.com/pion/webrtc/v4"
 )
@@ -33,7 +34,19 @@ func AcceptAnswer(userId string, message string) {
 		return
 	}
 
+	log.Println(meeting.PeerConnections)
+	_, pcExist := meeting.PeerConnections[userId]
+
+	log.Println("pcExist", pcExist)
+	if !pcExist || meeting.PeerConnections[userId].PeerConnection == nil {
+		user.WriteJSON(map[string]string{
+			"event":   "error",
+			"message": "Peer connection not found or not initialized",
+		})
+		return
+	}
 	if err := meeting.PeerConnections[userId].PeerConnection.SetRemoteDescription(acceptAnswerPayload.Answer); err != nil {
+		log.Println(err.Error(), acceptAnswerPayload.Answer)
 		user.WriteJSON(map[string]string{
 			"event":   "error",
 			"message": "Something went wrong while setting remote description",
