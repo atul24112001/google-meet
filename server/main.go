@@ -32,6 +32,7 @@ func main() {
 	r.Methods("GET").Path("/api/v1/auth/me").HandlerFunc(auth.VerifyToken)
 	r.Methods("POST").Path("/api/v1/meet").HandlerFunc(meet.CreateMeet)
 	r.Methods("GET").Path("/api/v1/meet/{meetId}").HandlerFunc(meet.GetMeetDetails)
+	r.Methods("GET").Path("/api/v1/connections").HandlerFunc(ws.GetConnections)
 
 	corsHandler := handlers.CORS(
 		handlers.AllowedOrigins([]string{"http://localhost:3000"}),

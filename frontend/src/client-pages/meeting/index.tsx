@@ -4,90 +4,222 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import Navbar from "@/layout/navbar";
+// import { User } from "@/types";
 import { Mic, Mic2, MicOff, User, Video, VideoOff } from "lucide-react";
 import { useRouter } from "next/navigation";
 import React, { useEffect, useRef, useState } from "react";
+
+type UserType = {
+  userId: string;
+  name: string;
+  email: string;
+  accepted: boolean;
+};
 
 export default function ClientMeeting({ hostId, meetId, wss }: Props) {
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const [allow, setAllow] = useState({ audio: true, video: true });
   const [joinedMeeting, setJoinedMeeting] = useState(false);
+  const [joining, setJoining] = useState(false);
   const [users, setUsers] = useState<{
-    [key: string]: {
-      userId: string;
-      name: string;
-      email: string;
-      accepted: boolean;
-    };
+    [key: string]: UserType;
   }>({});
-  const [peerConnection, setPeerConnection] =
-    useState<CustomRTCPeerConnection | null>(null);
-  const [localStream, setLocalStream] = useState<null | MediaStream>(null);
+  const [userRequests, setUserRequests] = useState<{
+    [key: string]: UserType;
+  }>({});
 
   const [socket, setSocket] = useState<WebSocket | null>(null);
   const { toast } = useToast();
 
-  const { user, isAuthenticated } = useAuth();
+  const { user } = useAuth();
 
   useEffect(() => {
-    if (isAuthenticated) {
-      connectWss(0);
-    }
-  }, [isAuthenticated]);
-
-  useEffect(() => {
-    const pc = new CustomRTCPeerConnection(crypto.randomUUID());
-    setPeerConnection(pc);
-  }, []);
-
-  useEffect(() => {
-    if (socket && localStream) {
-      socket.onmessage = (ev) => {
-        const { event, message, data } = JSON.parse(ev.data);
-        switch (event) {
-          case "error":
-            toast({
-              title: "Something went wrong",
-              description: message,
-            });
-            break;
-          case "offer":
-            acceptOffer(data);
-            break;
-          case "candidate":
-            handleIceCandidate(data);
-            break;
-          case "joining-meeting":
-            joinMeeting();
-            break;
-          case "request-participant-join":
-            setUsers((prev) => {
-              return {
-                ...prev,
-                [data.userId]: {
-                  ...data,
-                  accepted: false,
-                },
-              };
-            });
-            break;
+    if (joinedMeeting) {
+      return () => {
+        try {
+          socket?.send(
+            JSON.stringify({
+              event: "leave",
+              data: {
+                meetingId: meetId,
+              },
+            })
+          );
+        } catch (error) {
+          console.log(error);
         }
       };
     }
-  }, [socket, localStream, peerConnection?.id]);
+  }, [joinedMeeting]);
 
   useEffect(() => {
     if (allow.audio || allow.video) {
       let mediaStream: MediaStream | null = null;
+      let pc: null | RTCPeerConnection = null;
       navigator.mediaDevices.getUserMedia(allow).then((stream) => {
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = stream;
         }
-        setLocalStream(stream);
+
+        pc = new RTCPeerConnection();
         mediaStream = stream;
+
+        pc.ontrack = function (event) {
+          if (event.track.kind === "audio") {
+            let el: any = document.createElement(event.track.kind);
+            el.srcObject = event.streams[0];
+            el.autoplay = true;
+            el.controls = false;
+            document.getElementById("remoteVideos")?.appendChild(el);
+
+            event.track.onmute = function (event) {
+              el.play();
+            };
+
+            event.streams[0].onremovetrack = ({ track }) => {
+              if (el.parentNode) {
+                el.parentNode.removeChild(el);
+              }
+            };
+            return;
+          }
+          let el: any = document.createElement(event.track.kind);
+          el.srcObject = event.streams[0];
+          el.autoplay = true;
+          el.controls = false;
+          el.muted = true;
+          document.getElementById("remoteVideos")?.appendChild(el);
+
+          event.track.onmute = function (event) {
+            el.play();
+          };
+
+          event.streams[0].onremovetrack = ({ track }) => {
+            if (el.parentNode) {
+              el.parentNode.removeChild(el);
+            }
+          };
+        };
+
+        stream.getTracks().forEach((track) => pc?.addTrack(track, stream));
+        const ws = new WebSocket(
+          `${process.env.NEXT_PUBLIC_API_URL}/websocket`
+        );
+
+        pc.onicecandidate = (e) => {
+          if (!e.candidate) {
+            return;
+          }
+          ws.send(
+            JSON.stringify({
+              event: "candidate",
+              data: JSON.stringify({
+                candidate: e.candidate,
+                meetId,
+              }),
+            })
+          );
+        };
+
+        ws.onopen = () => setSocket(ws);
+        ws.onclose = function (evt) {
+          window.alert("Websocket has closed");
+        };
+
+        ws.onmessage = function (ev) {
+          const { event, message, data } = JSON.parse(ev.data);
+          switch (event) {
+            case "error":
+              toast({
+                title: "Something went wrong",
+                description: message,
+              });
+              break;
+            case "offer":
+              const { offer } = data;
+              pc?.setRemoteDescription(JSON.parse(offer).offer);
+              pc?.createAnswer().then((answer) => {
+                pc?.setLocalDescription(answer);
+                ws.send(
+                  JSON.stringify({
+                    event: "answer",
+                    data: JSON.stringify({
+                      meetId,
+                      answer: answer,
+                    }),
+                  })
+                );
+              });
+              setUsers((prev) => {
+                return data.users.map((u: UserType) => ({
+                  ...u,
+                  accepted: true,
+                }));
+              });
+              setJoinedMeeting(true);
+              break;
+            case "candidate":
+              try {
+                pc?.addIceCandidate(JSON.parse(data));
+              } catch (error) {
+                console.log(error);
+              }
+              break;
+            case "joining-meeting":
+              setJoinedMeeting(true);
+              setJoining(false);
+
+              break;
+            case "request-participant-join":
+              setUserRequests((prev) => {
+                return {
+                  ...prev,
+                  [data.userId]: {
+                    ...data,
+                    accepted: false,
+                  },
+                };
+              });
+              break;
+            case "new-participant":
+              setUsers((prev) => {
+                return {
+                  ...prev,
+                  [data.userId]: {
+                    ...data,
+                    accepted: true,
+                  },
+                };
+              });
+            case "disconnect":
+              setUsers((prev) => {
+                delete prev[data.userId];
+                return { ...prev };
+              });
+            default:
+          }
+        };
+        if (joinedMeeting) {
+          ws.onopen = () => {
+            ws.send(
+              JSON.stringify({
+                event: "join-meeting",
+                data: JSON.stringify({
+                  meetingId: meetId,
+                  token: localStorage.getItem("token"),
+                  audio: allow.audio,
+                  video: allow.video,
+                }),
+              })
+            );
+          };
+        }
       });
 
       return () => {
+        // if (pc) {
+        //   pc.close();
+        // }
         if (mediaStream) {
           mediaStream.getTracks().forEach(function (track) {
             track.stop();
@@ -95,105 +227,10 @@ export default function ClientMeeting({ hostId, meetId, wss }: Props) {
         }
       };
     }
-  }, [allow.audio, allow.video, joinedMeeting]);
-
-  function handleIceCandidate(data: any) {
-    peerConnection?.addIceCandidate(JSON.parse(data));
-  }
-
-  async function joinMeeting() {
-    setJoinedMeeting(true);
-  }
-
-  async function acceptOffer(data: any) {
-    const parsedData = JSON.parse(data);
-    if (!peerConnection) {
-      return;
-    }
-
-    peerConnection.ontrack = function (e) {
-      console.log({ remoteTrack: e });
-      if (e.track.kind === "audio") {
-        return;
-      }
-
-      let el = document.createElement("video");
-      el.srcObject = e.streams[0];
-      el.autoplay = true;
-      el.controls = true;
-      el.style.aspectRatio = "video";
-      document.getElementById("remoteVideos")?.appendChild(el);
-
-      e.track.onmute = function (event) {
-        el.play();
-      };
-
-      e.streams[0].onremovetrack = ({ track }) => {
-        if (el.parentNode) {
-          el.parentNode.removeChild(el);
-        }
-      };
-    };
-
-    peerConnection.onicecandidate = (e) => {
-      if (!e.candidate) {
-        return;
-      }
-
-      socket?.send(
-        JSON.stringify({
-          event: "candidate",
-          data: JSON.stringify({
-            candidate: e.candidate,
-            meetId,
-          }),
-        })
-      );
-    };
-    peerConnection.setRemoteDescription(parsedData.offer);
-    peerConnection.createAnswer(data.offer).then((answer) => {
-      peerConnection.setLocalDescription(answer);
-      socket?.send(
-        JSON.stringify({
-          event: "answer",
-          data: JSON.stringify({
-            meetId,
-            answer: answer,
-          }),
-        })
-      );
-    });
-
-    peerConnection.getSenders().forEach((sender) => {
-      peerConnection.removeTrack(sender);
-    });
-
-    console.log({ localStream });
-    localStream?.getTracks().forEach((track) => {
-      console.log({ track });
-      peerConnection.addTrack(track, localStream);
-    });
-  }
-
-  function connectWss(retry: number) {
-    if (retry < 5) {
-      const ws = new WebSocket(`${process.env.NEXT_PUBLIC_API_URL}/websocket`);
-      ws.onclose = (e) => {
-        console.log(e);
-        connectWss(retry + 1);
-      };
-
-      ws.onerror = (e) => {
-        console.log(e);
-      };
-      ws.onopen = () => {
-        setSocket(ws);
-      };
-    }
-  }
+  }, [allow.audio, allow.video]);
 
   function joinHandler() {
-    console.log("Joinging meeting ", meetId);
+    setJoining(true);
     socket?.send(
       JSON.stringify({
         event: "join-meeting",
@@ -222,28 +259,34 @@ export default function ClientMeeting({ hostId, meetId, wss }: Props) {
           return (
             <div key={userId}>
               <h2>{user.name}</h2>
-              {!user.accepted && (
-                <button
-                  onClick={() => {
-                    socket?.send(
-                      JSON.stringify({
-                        event: "accept-join-request",
-                        data: JSON.stringify({
-                          meetingId: meetId,
-                          ...user,
-                          ...allow,
-                        }),
-                      })
-                    );
-                    setUsers((prev) => {
-                      prev[userId].accepted = true;
-                      return { ...prev };
-                    });
-                  }}
-                >
-                  Accept
-                </button>
-              )}
+            </div>
+          );
+        })}
+
+        {Object.values(userRequests).map((user) => {
+          return (
+            <div key={user.userId}>
+              <h2>{user.name}</h2>
+              <button
+                onClick={() => {
+                  socket?.send(
+                    JSON.stringify({
+                      event: "accept-join-request",
+                      data: JSON.stringify({
+                        meetingId: meetId,
+                        ...user,
+                        ...allow,
+                      }),
+                    })
+                  );
+                  setUserRequests((prev) => {
+                    delete prev[user.userId];
+                    return { ...prev };
+                  });
+                }}
+              >
+                Accept
+              </button>
             </div>
           );
         })}
@@ -318,8 +361,12 @@ export default function ClientMeeting({ hostId, meetId, wss }: Props) {
         </div>
         <div className="flex-1 flex flex-col gap-3 justify-center items-center">
           <h1 className="text-2xl">Ready to Join ?</h1>
-          <Button onClick={joinHandler}>
-            {hostId === user?.id ? "Join" : "Request to join"}
+          <Button disabled={joining} onClick={joinHandler}>
+            {joining
+              ? "Joining.."
+              : hostId === user?.id
+              ? "Join"
+              : "Request to join"}
           </Button>
         </div>
       </div>
@@ -333,10 +380,10 @@ type Props = {
   wss: string;
 };
 
-class CustomRTCPeerConnection extends RTCPeerConnection {
-  id: string;
-  constructor(id: string, configuration?: RTCConfiguration) {
-    super(configuration);
-    this.id = id;
-  }
-}
+// class CustomRTCPeerConnection extends RTCPeerConnection {
+//   id: string;
+//   constructor(id: string, configuration?: RTCConfiguration) {
+//     super(configuration);
+//     this.id = id;
+//   }
+// }

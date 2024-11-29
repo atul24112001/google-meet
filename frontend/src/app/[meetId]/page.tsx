@@ -2,6 +2,7 @@ import ClientMeeting from "@/client-pages/meeting";
 import { ServerProps } from "@/types";
 import axios, { AxiosError } from "axios";
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 
 export default async function Meeting({ params }: ServerProps) {
   try {
@@ -31,5 +32,5 @@ export default async function Meeting({ params }: ServerProps) {
     }
     console.log(error);
   }
-  return <div>Internal server error</div>;
+  redirect("/");
 }

@@ -3,6 +3,7 @@ package ws
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"sync"
 
@@ -31,6 +32,12 @@ func WebsocketHandler(w http.ResponseWriter, r *http.Request) {
 
 	message := &WebsocketMessage{}
 
+	keys := make([]string, 0, len(connections))
+	for k := range connections {
+		keys = append(keys, k)
+	}
+	log.Println("keys: ", keys)
+
 	for {
 		_, raw, err := c.ReadMessage()
 		if err != nil {
@@ -53,10 +60,9 @@ func WebsocketHandler(w http.ResponseWriter, r *http.Request) {
 		case "join-meeting":
 			JoinMeeting(r.Context(), c, *message)
 		case "accept-join-request":
-			var data JoinMeetingRequest
-			err := json.Unmarshal([]byte(message.Data), &data)
-			if err == nil {
-				JoinMeetingRequestHandler(r.Context(), data.MeetingId, data.UserId, data.Audio, data.Video)
+			userId, exist := wsUserMap[c.Conn]
+			if exist {
+				AcceptJoinRequestHandler(r.Context(), userId, message.Data)
 			}
 		case "candidate":
 			userId, exist := wsUserMap[c.Conn]
@@ -68,6 +74,10 @@ func WebsocketHandler(w http.ResponseWriter, r *http.Request) {
 			if exist {
 				AcceptAnswer(userId, message.Data)
 			}
+		case "leave":
+			userId := wsUserMap[c.Conn]
+			delete(users, userId)
+			Disconnect(userId)
 		}
 	}
 }

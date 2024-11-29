@@ -190,13 +190,15 @@ func JoinMeetingRequestHandler(ctx context.Context, meetingId string, userId str
 		logger.Infof("ICE connection state changed: %s meedId=%s", is, meetingId)
 	})
 
-	signalPeerConnections(meetingId, userId, audio, video)
 	SendMessage(userId, map[string]interface{}{
 		"event": "joining-meeting",
 		"data": map[string]interface{}{
 			"meetingId": meetingId,
+			// "users":     users,
 		},
 	})
+
+	signalPeerConnections(meetingId, userId, audio, video)
 }
 
 func signalPeerConnections(meetingId string, userId string, audio bool, video bool) {
@@ -269,10 +271,24 @@ func signalPeerConnections(meetingId string, userId string, audio bool, video bo
 			}
 
 			logger.Infof("Send offer to client: %v", offer)
+			_users := make([]interface{}, 0, len(meeting.PeerConnections)-1)
+			for k := range meeting.PeerConnections {
+				participant, err := query.GetUserById(context.Background(), k)
+				if err == nil {
+					_users = append(_users, map[string]string{
+						"name":   participant.Name,
+						"userId": participant.Id,
+						"email":  participant.Email,
+					})
+				}
+			}
 
-			if err = meeting.PeerConnections[participantId].Websocket.WriteJSON(&WebsocketMessage{
-				Event: "offer",
-				Data:  string(offerString),
+			if err = meeting.PeerConnections[participantId].Websocket.WriteJSON(map[string]interface{}{
+				"event": "offer",
+				"data": map[string]interface{}{
+					"offer": string(offerString),
+					"users": _users,
+				},
 			}); err != nil {
 				return true
 			}
