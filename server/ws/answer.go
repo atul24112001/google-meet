@@ -10,6 +10,8 @@ import (
 type AcceptAnswerPayload struct {
 	Answer webrtc.SessionDescription `json:"answer"`
 	MeetId string                    `json:"meetId"`
+	Audio  bool                      `json:"audio"`
+	Video  bool                      `json:"video"`
 }
 
 func AcceptAnswer(userId string, message string) {
@@ -34,10 +36,8 @@ func AcceptAnswer(userId string, message string) {
 		return
 	}
 
-	log.Println(meeting.PeerConnections)
 	_, pcExist := meeting.PeerConnections[userId]
 
-	log.Println("pcExist", pcExist)
 	if !pcExist || meeting.PeerConnections[userId].PeerConnection == nil {
 		user.WriteJSON(map[string]string{
 			"event":   "error",
@@ -53,4 +53,6 @@ func AcceptAnswer(userId string, message string) {
 		})
 	}
 
+	meeting.PeerConnections[userId].Audio = acceptAnswerPayload.Audio
+	meeting.PeerConnections[userId].Video = acceptAnswerPayload.Video
 }

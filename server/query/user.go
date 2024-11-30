@@ -12,7 +12,7 @@ import (
 func GetUserById(ctx context.Context, userId string) (model.User, error) {
 	var user model.User
 	redisKey := fmt.Sprintf("google-meet:user:%s", userId)
-	cmd := lib.RedisClient.Get(ctx, redisKey)
+	cmd := lib.RedisClient.Get(context.Background(), redisKey)
 	err := cmd.Err()
 	if cmd.Err() != nil {
 		if err != nil {
@@ -24,7 +24,7 @@ func GetUserById(ctx context.Context, userId string) (model.User, error) {
 				return user, err
 			}
 
-			lib.RedisClient.Set(ctx, redisKey, string(userByte), 24*time.Hour)
+			lib.RedisClient.Set(context.Background(), redisKey, string(userByte), 24*time.Hour)
 			return user, err
 		}
 

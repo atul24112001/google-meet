@@ -78,6 +78,17 @@ func WebsocketHandler(w http.ResponseWriter, r *http.Request) {
 			userId := wsUserMap[c.Conn]
 			delete(users, userId)
 			Disconnect(userId)
+		case "change-track":
+			userId := wsUserMap[c.Conn]
+			meetingId, err := ChangeTrack(userId, message.Data)
+			if err == nil {
+				JoinMeetingRequestHandler(r.Context(), meetingId, userId)
+			}
+		case "new-track":
+			// userId, exist := wsUserMap[c.Conn]
+			// if exist {
+			// 	NewTrackHandler(r.Context(), userId, message.Data)
+			// }
 		}
 	}
 }

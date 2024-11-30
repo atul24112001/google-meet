@@ -1,15 +1,26 @@
 package ws
 
 import (
+	"context"
+	"encoding/json"
+
 	"github.com/pion/rtp"
 	"github.com/pion/webrtc/v4"
 )
 
-func TrackHandler(tr *webrtc.TrackRemote, meetingId string, userId string, audio bool, video bool) {
+func TrackHandler(tr *webrtc.TrackRemote, meetingId string, userId string) {
 	logger.Infof("Got remote track: MeetId=%s Kind=%s, ID=%s, PayloadType=%d", meetingId, tr.Kind(), tr.ID(), tr.PayloadType())
+	pc := connections[meetingId].PeerConnections[userId]
 
-	trackLocal := addTrack(tr, meetingId, userId, audio, video)
-	defer removeTrack(trackLocal, meetingId, userId, audio, video)
+	if !pc.Audio && tr.Kind() == webrtc.RTPCodecTypeAudio {
+		return
+	}
+
+	if !pc.Video && tr.Kind() == webrtc.RTPCodecTypeVideo {
+		return
+	}
+	trackLocal := addTrack(tr, meetingId, userId)
+	defer removeTrack(trackLocal, meetingId, userId)
 
 	buf := make([]byte, 1500)
 	rtpPkt := &rtp.Packet{}
@@ -35,13 +46,13 @@ func TrackHandler(tr *webrtc.TrackRemote, meetingId string, userId string, audio
 }
 
 // Add to list of tracks and fire renegotation for all PeerConnections
-func addTrack(t *webrtc.TrackRemote, meetingId string, userId string, audio bool, video bool) *webrtc.TrackLocalStaticRTP {
+func addTrack(t *webrtc.TrackRemote, meetingId string, userId string) *webrtc.TrackLocalStaticRTP {
 	meeting := connections[meetingId]
 
 	meeting.ListLock.Lock()
 	defer func() {
 		meeting.ListLock.Unlock()
-		signalPeerConnections(meetingId, userId, audio, video)
+		signalPeerConnections(meetingId, userId)
 	}()
 
 	// Create a new TrackLocal with the same codec as our incoming
@@ -51,17 +62,38 @@ func addTrack(t *webrtc.TrackRemote, meetingId string, userId string, audio bool
 	}
 
 	meeting.TrackLocals[t.ID()] = trackLocal
+	meeting.TrackLocalsMap.Store(t.StreamID(), userId)
 	return trackLocal
 }
 
 // Remove from list of tracks and fire renegotation for all PeerConnections
-func removeTrack(t *webrtc.TrackLocalStaticRTP, meetingId string, userId string, audio bool, video bool) {
+func removeTrack(t *webrtc.TrackLocalStaticRTP, meetingId string, userId string) {
 	meeting := connections[meetingId]
 	meeting.ListLock.Lock()
 	defer func() {
 		meeting.ListLock.Unlock()
-		signalPeerConnections(meetingId, userId, audio, video)
+		signalPeerConnections(meetingId, userId)
 	}()
 
 	delete(meeting.TrackLocals, t.ID())
+	meeting.TrackLocalsMap.Delete(t.StreamID())
+}
+
+type NewTrackPayload struct {
+	MeetingId string `json:"meetingId"`
+	TrackId   string `json:"trackId"`
+	UserId    string `json:"userId"`
+}
+
+func NewTrackHandler(ctx context.Context, userId string, payload string) {
+	var newTrackPayload NewTrackPayload
+	err := json.Unmarshal([]byte(payload), &newTrackPayload)
+	if err != nil {
+		SendMessage(userId, map[string]string{
+			"event":   "error",
+			"message": "Error parsing new track data",
+		})
+		return
+	}
+	connections[newTrackPayload.MeetingId].TrackLocalsMap.Store(newTrackPayload.TrackId, userId)
 }

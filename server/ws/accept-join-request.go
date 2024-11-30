@@ -15,7 +15,7 @@ func AcceptJoinRequestHandler(ctx context.Context, userId string, payload string
 		})
 		return
 	}
-	JoinMeetingRequestHandler(ctx, data.MeetingId, data.UserId, data.Audio, data.Video)
+	JoinMeetingRequestHandler(ctx, data.MeetingId, data.UserId)
 	for k := range connections[data.MeetingId].PeerConnections {
 		if k != userId && k != data.UserId {
 			SendMessage(userId, map[string]interface{}{

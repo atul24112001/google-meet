@@ -5,7 +5,18 @@ import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import Navbar from "@/layout/navbar";
 // import { User } from "@/types";
-import { Mic, Mic2, MicOff, User, Video, VideoOff } from "lucide-react";
+import {
+  Mic,
+  Mic2,
+  MicOff,
+  MonitorUp,
+  MonitorX,
+  ScreenShare,
+  ScreenShareOff,
+  User,
+  Video,
+  VideoOff,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import React, { useEffect, useRef, useState } from "react";
 
@@ -18,7 +29,11 @@ type UserType = {
 
 export default function ClientMeeting({ hostId, meetId, wss }: Props) {
   const localVideoRef = useRef<HTMLVideoElement>(null);
-  const [allow, setAllow] = useState({ audio: true, video: true });
+  const [allow, setAllow] = useState({
+    audio: true,
+    video: true,
+    shareScreen: false,
+  });
   const [joinedMeeting, setJoinedMeeting] = useState(false);
   const [joining, setJoining] = useState(false);
   const [users, setUsers] = useState<{
@@ -27,6 +42,7 @@ export default function ClientMeeting({ hostId, meetId, wss }: Props) {
   const [userRequests, setUserRequests] = useState<{
     [key: string]: UserType;
   }>({});
+  const [tracksMap, setTracksMap] = useState<{ [key: string]: string }>({});
 
   const [socket, setSocket] = useState<WebSocket | null>(null);
   const { toast } = useToast();
@@ -53,181 +69,296 @@ export default function ClientMeeting({ hostId, meetId, wss }: Props) {
   }, [joinedMeeting]);
 
   useEffect(() => {
-    if (allow.audio || allow.video) {
-      let mediaStream: MediaStream | null = null;
-      let pc: null | RTCPeerConnection = null;
-      navigator.mediaDevices.getUserMedia(allow).then((stream) => {
+    let pc: null | RTCPeerConnection = null;
+
+    document.getElementById("remoteVideos")?.childNodes.forEach((node) => {
+      document.getElementById("remoteVideos")?.removeChild(node);
+    });
+    const streams: MediaStream[] = [];
+
+    (async () => {
+      if (allow.shareScreen) {
+        const stream = await navigator.mediaDevices.getDisplayMedia({
+          audio: true,
+          video: true,
+        });
+        streams.push(stream);
+      }
+
+      if (allow.audio || allow.video) {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: allow.audio,
+          video: allow.video,
+        });
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = stream;
         }
+        streams.push(stream);
+      }
+      pc = initiateConnection(streams);
+    })();
 
-        pc = new RTCPeerConnection();
-        mediaStream = stream;
+    // if (!allow.audio && !allow.video) {
+    //   pc = initiateConnection([]);
+    // } else if(allow.shareScreen){
+    //   navigator.mediaDevices.getDisplayMedia({
+    //     audio: true,
+    //     video: true,
+    //   }).then((stream) => {
+    //     pc = initiateConnection([stream]);
+    //     mediaStream = stream;
+    //   })
+    // } else {
+    //   navigator.mediaDevices.getUserMedia({audio: allow.audio, video: allow.video}).then((stream) => {
+    // if (localVideoRef.current) {
+    //   localVideoRef.current.srcObject = stream;
+    // }
 
-        pc.ontrack = function (event) {
-          if (event.track.kind === "audio") {
-            let el: any = document.createElement(event.track.kind);
-            el.srcObject = event.streams[0];
-            el.autoplay = true;
-            el.controls = false;
-            document.getElementById("remoteVideos")?.appendChild(el);
+    //     pc = initiateConnection([stream]);
+    //     mediaStream = stream;
+    //   });
+    // }
 
-            event.track.onmute = function (event) {
-              el.play();
-            };
+    return () => {
+      if (pc) {
+        pc.getSenders().forEach((sender) => {
+          pc?.removeTrack(sender);
+        });
+        pc?.close();
+      }
+      if (streams.length > 0) {
+        streams.forEach((mediaStream) => {
+          mediaStream.getTracks().forEach(function (track) {
+            document.getElementById(track.id)?.remove();
+            track.stop();
+          });
+        });
+      }
+    };
+  }, [allow]);
 
-            event.streams[0].onremovetrack = ({ track }) => {
-              if (el.parentNode) {
-                el.parentNode.removeChild(el);
-              }
-            };
-            return;
-          }
-          let el: any = document.createElement(event.track.kind);
-          el.srcObject = event.streams[0];
-          el.autoplay = true;
-          el.controls = false;
-          el.muted = true;
-          document.getElementById("remoteVideos")?.appendChild(el);
+  const initiateConnection = (streams: MediaStream[]) => {
+    let pc = new RTCPeerConnection();
 
-          event.track.onmute = function (event) {
-            el.play();
-          };
+    pc.ontrack = function (event) {
+      // setMediaStream(prev => {
+      // event.streams[0].id
+      // })
+      document.getElementById(event.track.id)?.remove();
+      if (event.track.kind === "audio") {
+        let el = document.createElement("audio");
+        el.srcObject = event.streams[0];
+        el.autoplay = true;
+        el.controls = false;
+        // el.id = event.track.id;
+        document.getElementById("remoteVideos")?.appendChild(el);
 
-          event.streams[0].onremovetrack = ({ track }) => {
-            if (el.parentNode) {
-              el.parentNode.removeChild(el);
-            }
-          };
+        event.track.onmute = function (event) {
+          el.play();
         };
 
-        stream.getTracks().forEach((track) => pc?.addTrack(track, stream));
-        const ws = new WebSocket(
-          `${process.env.NEXT_PUBLIC_API_URL}/websocket`
-        );
-
-        pc.onicecandidate = (e) => {
-          if (!e.candidate) {
-            return;
+        event.streams[0].onremovetrack = ({ track }) => {
+          document.getElementById(track.id)?.remove();
+          if (el.parentNode) {
+            el.parentNode.removeChild(el);
           }
+        };
+        return;
+      }
+      let el = document.createElement("video");
+      let elName = document.createElement("p");
+      el.srcObject = event.streams[0];
+      el.autoplay = true;
+      el.controls = false;
+      el.className =
+        "w-[90%] aspect-video object-cover  bg-background rounded-lg";
+      el.muted = true;
+      el.id = event.streams[0].id;
+      elName.innerText = event.streams[0].id;
+      document.getElementById("remoteVideos")?.appendChild(el);
+      document.getElementById("remoteVideos")?.appendChild(elName);
+
+      event.track.onmute = function (event) {
+        el.play();
+      };
+
+      event.streams[0].onremovetrack = ({ track }) => {
+        document.getElementById("remoteVideos")?.removeChild(el);
+        document.getElementById("remoteVideos")?.removeChild(elName);
+      };
+    };
+
+    const ws = new WebSocket(`${process.env.NEXT_PUBLIC_API_URL}/websocket`);
+
+    pc.onicecandidate = (e) => {
+      if (!e.candidate) {
+        return;
+      }
+      ws.send(
+        JSON.stringify({
+          event: "candidate",
+          data: JSON.stringify({
+            candidate: e.candidate,
+            meetId,
+          }),
+        })
+      );
+    };
+
+    ws.onopen = () => {
+      setSocket(ws);
+      streams.forEach((stream) => {
+        stream.getTracks().forEach((track) => {
           ws.send(
             JSON.stringify({
-              event: "candidate",
+              event: "new-track",
               data: JSON.stringify({
-                candidate: e.candidate,
-                meetId,
+                meetingId: meetId,
+                userId: user?.id,
+                trackId: track.id,
               }),
             })
           );
-        };
+          return pc?.addTrack(track, stream);
+        });
+      });
+    };
+    ws.onclose = function (evt) {
+      window.alert("Websocket has closed");
+    };
 
-        ws.onopen = () => setSocket(ws);
-        ws.onclose = function (evt) {
-          window.alert("Websocket has closed");
-        };
+    ws.onmessage = function (ev) {
+      let _users: { [key: string]: boolean } = {};
+      Object.keys(users).forEach((id) => {
+        _users[id] = true;
+      });
+      const { event, message, data } = JSON.parse(ev.data);
+      switch (event) {
+        case "error":
+          setJoining(false);
+          toast({
+            title: "Something went wrong",
+            description: message,
+          });
+          break;
+        case "offer":
+          const { offer } = data;
+          pc?.setRemoteDescription(JSON.parse(offer).offer)
+            .then(() => {
+              pc?.createAnswer()
+                .then((answer) => {
+                  pc?.setLocalDescription(answer);
+                  ws.send(
+                    JSON.stringify({
+                      event: "answer",
+                      data: JSON.stringify({
+                        meetId,
+                        answer: answer,
+                        audio: localStorage.getItem("audio") !== "false",
+                        video: localStorage.getItem("video") !== "false",
+                      }),
+                    })
+                  );
+                })
+                .catch(console.log);
+            })
+            .catch(console.log);
+          setUsers((prev) => {
+            return data.users.map((u: UserType) => {
+              _users[u.userId] = true;
+              return { ...u, accepted: true };
+            });
+          });
+          setTracksMap(data.tracks);
+          setJoinedMeeting(true);
+          break;
+        case "candidate":
+          pc?.addIceCandidate(JSON.parse(data)).catch((err) => {
+            console.log(err);
+          });
+          break;
+        case "joining-meeting":
+          setJoinedMeeting(true);
+          setJoining(false);
 
-        ws.onmessage = function (ev) {
-          const { event, message, data } = JSON.parse(ev.data);
-          switch (event) {
-            case "error":
-              toast({
-                title: "Something went wrong",
-                description: message,
-              });
-              break;
-            case "offer":
-              const { offer } = data;
-              pc?.setRemoteDescription(JSON.parse(offer).offer);
-              pc?.createAnswer().then((answer) => {
-                pc?.setLocalDescription(answer);
-                ws.send(
-                  JSON.stringify({
-                    event: "answer",
-                    data: JSON.stringify({
-                      meetId,
-                      answer: answer,
-                    }),
-                  })
-                );
-              });
-              setUsers((prev) => {
-                return data.users.map((u: UserType) => ({
-                  ...u,
-                  accepted: true,
-                }));
-              });
-              setJoinedMeeting(true);
-              break;
-            case "candidate":
-              try {
-                pc?.addIceCandidate(JSON.parse(data));
-              } catch (error) {
-                console.log(error);
-              }
-              break;
-            case "joining-meeting":
-              setJoinedMeeting(true);
-              setJoining(false);
-
-              break;
-            case "request-participant-join":
-              setUserRequests((prev) => {
-                return {
-                  ...prev,
-                  [data.userId]: {
-                    ...data,
-                    accepted: false,
-                  },
-                };
-              });
-              break;
-            case "new-participant":
-              setUsers((prev) => {
-                return {
-                  ...prev,
-                  [data.userId]: {
-                    ...data,
-                    accepted: true,
-                  },
-                };
-              });
-            case "disconnect":
-              setUsers((prev) => {
-                delete prev[data.userId];
-                return { ...prev };
-              });
-            default:
-          }
-        };
-        if (joinedMeeting) {
-          ws.onopen = () => {
+          break;
+        case "request-participant-join":
+          if (_users[data.userId]) {
             ws.send(
               JSON.stringify({
                 event: "join-meeting",
                 data: JSON.stringify({
                   meetingId: meetId,
                   token: localStorage.getItem("token"),
-                  audio: allow.audio,
-                  video: allow.video,
                 }),
               })
             );
-          };
-        }
-      });
-
-      return () => {
-        // if (pc) {
-        //   pc.close();
-        // }
-        if (mediaStream) {
-          mediaStream.getTracks().forEach(function (track) {
-            track.stop();
+          } else {
+            setUserRequests((prev) => {
+              return {
+                ...prev,
+                [data.userId]: {
+                  ...data,
+                  accepted: false,
+                },
+              };
+            });
+          }
+          break;
+        case "new-participant":
+          _users[data.userId] = true;
+          setUsers((prev) => {
+            return {
+              ...prev,
+              [data.userId]: {
+                ...data,
+                accepted: true,
+              },
+            };
           });
-        }
+        case "disconnect":
+          _users[data.userId] = false;
+          setUsers((prev) => {
+            delete prev[data.userId];
+            return { ...prev };
+          });
+        default:
+      }
+    };
+    if (joinedMeeting) {
+      ws.onopen = () => {
+        ws.send(
+          JSON.stringify({
+            event: "join-meeting",
+            data: JSON.stringify({
+              meetingId: meetId,
+              token: localStorage.getItem("token"),
+              // audio: allow.audio,
+              // video: allow.video,
+            }),
+          })
+        );
       };
     }
-  }, [allow.audio, allow.video]);
+    return pc;
+  };
+
+  // useEffect(() => {
+  // if (allow.audio || allow.video) {
+  //   socket?.send(
+  //     JSON.stringify({
+  //       event: "change-track",
+  //       data: JSON.stringify({
+  //         audio: allow.audio,
+  //         video: allow.video,
+  //         meetingId: meetId,
+  //       }),
+  //     })
+  //   );
+  //   localStorage.setItem("audio", `${allow.audio}`);
+  //   localStorage.setItem("video", `${allow.video}`);
+  // }
+  // }, [allow.audio, allow.video]);
 
   function joinHandler() {
     setJoining(true);
@@ -237,8 +368,8 @@ export default function ClientMeeting({ hostId, meetId, wss }: Props) {
         data: JSON.stringify({
           meetingId: meetId,
           token: localStorage.getItem("token"),
-          audio: allow.audio,
-          video: allow.video,
+          // audio: allow.audio,
+          // video: allow.video,
         }),
       })
     );
@@ -251,8 +382,10 @@ export default function ClientMeeting({ hostId, meetId, wss }: Props) {
 
   return joinedMeeting ? (
     <div>
-      <h1>hii</h1>
-      <div id="remoteVideos"></div>
+      <div
+        className="flex flex-wrap gap-4 justify-center items-center"
+        id="remoteVideos"
+      ></div>
       <div>
         {Object.keys(users).map((userId) => {
           const user = users[userId];
@@ -262,7 +395,6 @@ export default function ClientMeeting({ hostId, meetId, wss }: Props) {
             </div>
           );
         })}
-
         {Object.values(userRequests).map((user) => {
           return (
             <div key={user.userId}>
@@ -291,7 +423,7 @@ export default function ClientMeeting({ hostId, meetId, wss }: Props) {
           );
         })}
       </div>
-      <div className="absolute flex text-white items-center justify-center gap-2 bottom-2 z-10">
+      <div className="fixed  bottom-0 left-0 right-0 bg-transparent py-3 flex justify-center items-center gap-2  z-10">
         <Button
           onClick={() => {
             setAllow((prev) => ({ ...prev, audio: !prev.audio }));
@@ -309,6 +441,15 @@ export default function ClientMeeting({ hostId, meetId, wss }: Props) {
           variant="ghost"
         >
           {allow.video ? <Video /> : <VideoOff />}
+        </Button>
+        <Button
+          onClick={() => {
+            setAllow((prev) => ({ ...prev, shareScreen: !prev.shareScreen }));
+          }}
+          size="icon"
+          variant="ghost"
+        >
+          {allow.shareScreen ? <MonitorX /> : <MonitorUp />}
         </Button>
       </div>
     </div>

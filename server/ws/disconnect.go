@@ -1,36 +1,37 @@
 package ws
 
-import "log"
-
 func Disconnect(userId string) {
 	for meetId, connection := range connections {
 		_, exist := connection.PeerConnections[userId]
 		if exist {
-			connections[meetId].PeerConnections[userId].PeerConnection.GracefulClose()
-			delete(connections[meetId].PeerConnections, userId)
+			connection.ListLock.Lock()
+			defer connection.ListLock.Unlock()
 
-			keys := make([]string, 0, len(connections[meetId].PeerConnections))
-			for k := range connections[meetId].PeerConnections {
+			if connection.PeerConnections != nil {
+				if connection.PeerConnections[userId] != nil {
+					connection.PeerConnections[userId].PeerConnection.GracefulClose()
+				}
+			}
+			delete(connection.PeerConnections, userId)
+
+			keys := make([]string, 0, len(connection.PeerConnections))
+			for k := range connection.PeerConnections {
 				keys = append(keys, k)
 			}
 
-			log.Println(keys, "=========================")
 			if len(keys) == 0 {
-				connections[meetId].ListLock.Lock()
-				defer connections[meetId].ListLock.Unlock()
-
-				for id, _ := range connections[meetId].TrackLocals {
-					delete(connections[meetId].TrackLocals, id)
+				for id, _ := range connection.TrackLocals {
+					delete(connection.TrackLocals, id)
 				}
 
-				for id, pcState := range connections[meetId].PeerConnections {
+				for id, pcState := range connection.PeerConnections {
 					if pcState != nil && pcState.PeerConnection != nil {
 						pcState.PeerConnection.Close()
 					}
-					delete(connections[meetId].PeerConnections, id)
+					delete(connection.PeerConnections, id)
 				}
-				connections[meetId].TrackLocals = nil
-				connections[meetId].PeerConnections = nil
+				connection.TrackLocals = nil
+				connection.PeerConnections = nil
 				delete(connections, meetId)
 				return
 			}

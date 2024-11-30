@@ -51,7 +51,13 @@ func JoinMeeting(ctx context.Context, conn *threadSafeWriter, message WebsocketM
 		return
 	}
 
-	if meet.UserId != claims.Id {
+	_, alreadyExist := connections[meet.Id]
+
+	if alreadyExist {
+		_, alreadyExist = connections[meet.Id].PeerConnections[claims.Id]
+	}
+
+	if meet.UserId != claims.Id && !alreadyExist {
 		host, hostExist := users[meet.UserId]
 		if !hostExist {
 			conn.WriteJSON(map[string]interface{}{
@@ -92,10 +98,10 @@ func JoinMeeting(ctx context.Context, conn *threadSafeWriter, message WebsocketM
 		// }
 		return
 	}
-	JoinMeetingRequestHandler(ctx, joinMeetingPayload.MeetingId, claims.Id, joinMeetingPayload.Audio, joinMeetingPayload.Video)
+	JoinMeetingRequestHandler(ctx, joinMeetingPayload.MeetingId, claims.Id)
 }
 
-func JoinMeetingRequestHandler(ctx context.Context, meetingId string, userId string, audio bool, video bool) {
+func JoinMeetingRequestHandler(ctx context.Context, meetingId string, userId string) {
 	user, exist := users[userId]
 	if !exist {
 		return
@@ -128,6 +134,7 @@ func JoinMeetingRequestHandler(ctx context.Context, meetingId string, userId str
 			ListLock:        sync.RWMutex{},
 			TrackLocals:     map[string]*webrtc.TrackLocalStaticRTP{},
 			PeerConnections: map[string]*PeerConnectionState{},
+			TrackLocalsMap:  sync.Map{},
 		}
 	}
 
@@ -141,7 +148,7 @@ func JoinMeetingRequestHandler(ctx context.Context, meetingId string, userId str
 	}
 
 	meeting.ListLock.Lock()
-	meeting.PeerConnections[userId] = &PeerConnectionState{peerConnection, user}
+	meeting.PeerConnections[userId] = &PeerConnectionState{peerConnection, user, true, true}
 	// log.Println("userId-PeerConnections", userId, )
 	meeting.ListLock.Unlock()
 
@@ -177,13 +184,14 @@ func JoinMeetingRequestHandler(ctx context.Context, meetingId string, userId str
 				logger.Errorf("Failed to close PeerConnection: %v", err)
 			}
 		case webrtc.PeerConnectionStateClosed:
-			signalPeerConnections(meetingId, userId, audio, video)
+			signalPeerConnections(meetingId, userId)
 		default:
 		}
 	})
 
 	peerConnection.OnTrack(func(tr *webrtc.TrackRemote, r *webrtc.RTPReceiver) {
-		TrackHandler(tr, meetingId, userId, audio, video)
+		log.Println("track id reciver", r.Track().ID())
+		TrackHandler(tr, meetingId, userId)
 	})
 
 	peerConnection.OnICEConnectionStateChange(func(is webrtc.ICEConnectionState) {
@@ -198,10 +206,10 @@ func JoinMeetingRequestHandler(ctx context.Context, meetingId string, userId str
 		},
 	})
 
-	signalPeerConnections(meetingId, userId, audio, video)
+	signalPeerConnections(meetingId, userId)
 }
 
-func signalPeerConnections(meetingId string, userId string, audio bool, video bool) {
+func signalPeerConnections(meetingId string, userId string) {
 	meeting, exist := connections[meetingId]
 	if !exist {
 		return
@@ -213,7 +221,7 @@ func signalPeerConnections(meetingId string, userId string, audio bool, video bo
 	}()
 
 	attemptSync := func() (tryAgain bool) {
-		for participantId := range meeting.PeerConnections {
+		for participantId, pc := range meeting.PeerConnections {
 			if meeting.PeerConnections[participantId].PeerConnection.ConnectionState() == webrtc.PeerConnectionStateClosed {
 				// log.Println("deleting participant")
 				// delete(meeting.PeerConnections, participantId)
@@ -244,10 +252,13 @@ func signalPeerConnections(meetingId string, userId string, audio bool, video bo
 			}
 
 			// Add all track we aren't sending yet to the PeerConnection
-			for trackID := range meeting.TrackLocals {
+			for trackID, track := range meeting.TrackLocals {
 				if _, ok := existingSenders[trackID]; !ok {
-					if _, err := meeting.PeerConnections[participantId].PeerConnection.AddTrack(meeting.TrackLocals[trackID]); err != nil {
-						return true
+					log.Println("Kind: ", track.Kind(), userId, pc.Audio, pc.Video)
+					if (track.Kind() == webrtc.RTPCodecTypeAudio && pc.Audio) || (track.Kind() == webrtc.RTPCodecTypeVideo && pc.Video) {
+						if _, err := meeting.PeerConnections[participantId].PeerConnection.AddTrack(meeting.TrackLocals[trackID]); err != nil {
+							return true
+						}
 					}
 				}
 			}
@@ -272,6 +283,8 @@ func signalPeerConnections(meetingId string, userId string, audio bool, video bo
 
 			logger.Infof("Send offer to client: %v", offer)
 			_users := make([]interface{}, 0, len(meeting.PeerConnections)-1)
+			_tracks := map[string]string{}
+
 			for k := range meeting.PeerConnections {
 				participant, err := query.GetUserById(context.Background(), k)
 				if err == nil {
@@ -283,11 +296,17 @@ func signalPeerConnections(meetingId string, userId string, audio bool, video bo
 				}
 			}
 
+			meeting.TrackLocalsMap.Range(func(key, value any) bool {
+				_tracks[key.(string)] = value.(string)
+				return true
+			})
+
 			if err = meeting.PeerConnections[participantId].Websocket.WriteJSON(map[string]interface{}{
 				"event": "offer",
 				"data": map[string]interface{}{
-					"offer": string(offerString),
-					"users": _users,
+					"offer":  string(offerString),
+					"users":  _users,
+					"tracks": _tracks,
 				},
 			}); err != nil {
 				return true
@@ -301,7 +320,7 @@ func signalPeerConnections(meetingId string, userId string, audio bool, video bo
 			// Release the lock and attempt a sync in 3 seconds. We might be blocking a RemoveTrack or AddTrack
 			go func() {
 				time.Sleep(time.Second * 3)
-				signalPeerConnections(meetingId, userId, audio, video)
+				signalPeerConnections(meetingId, userId)
 			}()
 			return
 		}
@@ -334,8 +353,8 @@ func dispatchKeyFrame(meeting *Connection) {
 type JoinMeetingPayload struct {
 	MeetingId string `json:"meetingId"`
 	Token     string `json:"token"`
-	Audio     bool   `json:"audio"`
-	Video     bool   `json:"video"`
+	// Audio     bool   `json:"audio"`
+	// Video     bool   `json:"video"`
 }
 
 type JoinMeetingRequest struct {
@@ -343,6 +362,6 @@ type JoinMeetingRequest struct {
 	UserId    string `json:"userId"`
 	Name      string `json:"name"`
 	Email     string `json:"email"`
-	Audio     bool   `json:"audio"`
-	Video     bool   `json:"video"`
+	// Audio     bool   `json:"audio"`
+	// Video     bool   `json:"video"`
 }
