@@ -13,7 +13,6 @@ import (
 
 var logger = logging.NewDefaultLoggerFactory().NewLogger("sfu-ws")
 
-var users = map[string]*threadSafeWriter{}
 var wsUserMap = map[*websocket.Conn]string{}
 
 var upgrader = websocket.Upgrader{
@@ -43,7 +42,7 @@ func WebsocketHandler(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			logger.Errorf("Failed to read message: %v", err)
 			userId := wsUserMap[c.Conn]
-			delete(users, userId)
+			SafeDeleteFromUsers(userId)
 			Disconnect(userId)
 			return
 		}
@@ -76,7 +75,7 @@ func WebsocketHandler(w http.ResponseWriter, r *http.Request) {
 			}
 		case "leave":
 			userId := wsUserMap[c.Conn]
-			delete(users, userId)
+			SafeDeleteFromUsers(userId)
 			Disconnect(userId)
 		case "change-track":
 			userId := wsUserMap[c.Conn]
@@ -94,7 +93,7 @@ func WebsocketHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func SendMessage(userId string, data interface{}) error {
-	user, exist := users[userId]
+	user, exist := SafeReadFromUsers(userId)
 	if exist {
 		return user.WriteJSON(data)
 	}

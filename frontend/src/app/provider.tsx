@@ -7,9 +7,16 @@ import {
 } from "next-themes";
 import { AuthContextProvider } from "@/context/AuthContext";
 
+export function ThemeProvider({
+  children,
+  ...props
+}: React.ComponentProps<typeof NextThemesProvider>) {
+  return <NextThemesProvider {...props}>{children}</NextThemesProvider>;
+}
+
 export default function Provider({ children }: PropsWithChildren<Props>) {
   return (
-    <NextThemesProvider
+    <ThemeProvider
       attribute="class"
       defaultTheme="system"
       enableSystem
@@ -18,7 +25,7 @@ export default function Provider({ children }: PropsWithChildren<Props>) {
       <AuthContextProvider>
         <div className="h-screen ">{children}</div>
       </AuthContextProvider>
-    </NextThemesProvider>
+    </ThemeProvider>
   );
 }
 

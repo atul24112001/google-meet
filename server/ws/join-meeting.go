@@ -38,13 +38,13 @@ func JoinMeeting(ctx context.Context, conn *threadSafeWriter, message WebsocketM
 		return
 	}
 
-	users[claims.Id] = conn
+	SafeWriteToUsers(claims.Id, conn)
 	wsUserMap[conn.Conn] = claims.Id
 
 	meet, err := query.GetMeetingById(ctx, joinMeetingPayload.MeetingId)
 	if err != nil {
 		logger.Errorf("Something went wrong while fetching meeting details: %v", err)
-		users[claims.Id].WriteJSON(map[string]interface{}{
+		conn.WriteJSON(map[string]interface{}{
 			"event":   "error",
 			"message": "Something went wrong while fetching meeting details",
 		})
@@ -58,7 +58,7 @@ func JoinMeeting(ctx context.Context, conn *threadSafeWriter, message WebsocketM
 	}
 
 	if meet.UserId != claims.Id && !alreadyExist {
-		host, hostExist := users[meet.UserId]
+		host, hostExist := SafeReadFromUsers(meet.UserId)
 		if !hostExist {
 			conn.WriteJSON(map[string]interface{}{
 				"event":   "error",
@@ -102,7 +102,7 @@ func JoinMeeting(ctx context.Context, conn *threadSafeWriter, message WebsocketM
 }
 
 func JoinMeetingRequestHandler(ctx context.Context, meetingId string, userId string) {
-	user, exist := users[userId]
+	user, exist := SafeReadFromUsers(userId)
 	if !exist {
 		return
 	}
@@ -254,7 +254,6 @@ func signalPeerConnections(meetingId string, userId string) {
 			// Add all track we aren't sending yet to the PeerConnection
 			for trackID, track := range meeting.TrackLocals {
 				if _, ok := existingSenders[trackID]; !ok {
-					log.Println("Kind: ", track.Kind(), userId, pc.Audio, pc.Video)
 					if (track.Kind() == webrtc.RTPCodecTypeAudio && pc.Audio) || (track.Kind() == webrtc.RTPCodecTypeVideo && pc.Video) {
 						if _, err := meeting.PeerConnections[participantId].PeerConnection.AddTrack(meeting.TrackLocals[trackID]); err != nil {
 							return true

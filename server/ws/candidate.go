@@ -12,7 +12,7 @@ type UpdateCandidatePayload struct {
 }
 
 func UpdateCandidate(userId string, message string) {
-	user, exist := users[userId]
+	user, exist := SafeReadFromUsers(userId)
 	if !exist {
 		return
 	}

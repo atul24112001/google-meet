@@ -15,7 +15,7 @@ type AcceptAnswerPayload struct {
 }
 
 func AcceptAnswer(userId string, message string) {
-	user, exist := users[userId]
+	user, exist := SafeReadFromUsers(userId)
 	if !exist {
 		return
 	}

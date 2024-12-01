@@ -24,11 +24,11 @@ export default function Navbar() {
 
   return (
     <div className="flex gap-2 items-center ">
-      {/* {show && (
+      {show && (
         <Button variant="ghost" size="icon" onClick={toggleTheme}>
           {theme === "dark" ? <Sun size={28} /> : <Moon size={28} />}
         </Button>
-      )} */}
+      )}
       {isAuthenticated && (
         <Button
           variant="destructive"
