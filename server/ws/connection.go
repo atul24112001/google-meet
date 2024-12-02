@@ -11,8 +11,6 @@ import (
 type PeerConnectionState struct {
 	PeerConnection *webrtc.PeerConnection
 	Websocket      *threadSafeWriter
-	Audio          bool
-	Video          bool
 }
 
 type Connection struct {
@@ -21,6 +19,7 @@ type Connection struct {
 	TrackLocals     map[string]*webrtc.TrackLocalStaticRTP
 	PeerConnections map[string]*PeerConnectionState
 	TrackLocalsMap  sync.Map
+	OfferQueue      OfferQueue
 }
 
 var connections = map[string]*Connection{}

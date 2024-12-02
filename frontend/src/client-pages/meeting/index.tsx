@@ -47,9 +47,6 @@ export default function ClientMeeting({ hostId, meetId, wss }: Props) {
   const [users, setUsers] = useState<{
     [key: string]: UserType;
   }>({});
-  const [userRequests, setUserRequests] = useState<{
-    [key: string]: UserType;
-  }>({});
   const [tracksMap, setTracksMap] = useState<{ [key: string]: string }>({});
 
   const [socket, setSocket] = useState<WebSocket | null>(null);
@@ -58,6 +55,12 @@ export default function ClientMeeting({ hostId, meetId, wss }: Props) {
       [key: string]: { stream: MediaStream; kind: string; updated: boolean };
     };
   }>({});
+  // const [localStreams, setLocalStreams] = useState<{
+  //   audio?: MediaStream;
+  //   video?: MediaStream;
+  //   screen?: MediaStream;
+  // }>({});
+  const [pc, setPc] = useState<RTCPeerConnection | null>(null);
   const { toast } = useToast();
 
   const { user } = useAuth();
@@ -82,304 +85,366 @@ export default function ClientMeeting({ hostId, meetId, wss }: Props) {
   }, [joinedMeeting]);
 
   useEffect(() => {
-    let pc: null | RTCPeerConnection = null;
+    setPc(new RTCPeerConnection());
+  }, []);
 
-    const streams: MediaStream[] = [];
+  useEffect(() => {
+    if (pc) {
+      initiateConnection();
+    }
+  }, [pc]);
 
-    (async () => {
-      if (allow.shareScreen) {
-        const stream = await navigator.mediaDevices.getDisplayMedia({
-          audio: true,
-          video: true,
-        });
-        streams.push(stream);
-      }
-
-      if (allow.audio || allow.video) {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: allow.audio,
-          video: allow.video,
-        });
-        if (localVideoRef.current) {
-          localVideoRef.current.srcObject = stream;
-        }
-        streams.push(stream);
-      }
-      pc = initiateConnection(streams);
-    })();
-
-    return () => {
-      if (pc) {
-        pc.getSenders().forEach((sender) => {
-          pc?.removeTrack(sender);
-        });
-        pc?.close();
-      }
-      if (streams.length > 0) {
-        streams.forEach((mediaStream) => {
-          mediaStream.getTracks().forEach(function (track) {
-            track.stop();
+  useEffect(() => {
+    let _stream: null | MediaStream = null;
+    let _sender: null | RTCRtpSender = null;
+    if (allow.audio && pc) {
+      navigator.mediaDevices
+        .getUserMedia({ audio: true })
+        .then((stream) => {
+          _stream = stream;
+          stream.getTracks().forEach((track) => {
+            console.log(`Adding ${track.kind} track: `, track.id);
+            _sender = pc?.addTrack(track, stream) || null;
           });
-        });
+          renegotiate();
+        })
+        .catch(console.log);
+    }
+    return () => {
+      console.log("Cleanup running for audio");
+      _stream?.getTracks().forEach((track) => {
+        track.stop();
+      });
+      if (_sender) {
+        pc?.removeTrack(_sender);
       }
+      renegotiate();
     };
-  }, [allow]);
+  }, [allow.audio, pc]);
 
-  const initiateConnection = (streams: MediaStream[]) => {
-    setMediaStreams((prev) => {
-      Object.keys(prev).forEach((streamId) => {
-        if (prev[streamId]?.audio) {
-          prev[streamId].audio.updated = false;
-        }
-        if (prev[streamId]?.video) {
-          prev[streamId].video.updated = false;
-        }
+  useEffect(() => {
+    let _stream: null | MediaStream = null;
+    let _sender: null | RTCRtpSender = null;
+    if (allow.video && pc) {
+      navigator.mediaDevices
+        .getUserMedia({ video: true })
+        .then((stream) => {
+          if (localVideoRef.current) {
+            localVideoRef.current.srcObject = stream;
+          }
+          _stream = stream;
+          stream.getTracks().forEach((track) => {
+            console.log(`Adding ${track.kind} track: `, track.id);
+            _sender = pc?.addTrack(track, stream) || null;
+          });
+          renegotiate();
+        })
+        .catch(console.log);
+    }
+    return () => {
+      console.log("Cleanup running for video");
+      _stream?.getTracks().forEach((track) => {
+        track.stop();
+        console.log("Stopping video track: ", track.id);
       });
-      return prev;
-    });
-    let pc = new RTCPeerConnection();
+      if (_sender) {
+        pc?.removeTrack(_sender);
+      }
+      renegotiate();
+    };
+  }, [allow.video, pc]);
 
-    pc.ontrack = function (event) {
+  const renegotiate = () => {
+    // initiateConnection();
+    socket?.send(
+      JSON.stringify({
+        event: "renegotiate",
+        data: JSON.stringify({
+          meetingId: meetId,
+        }),
+      })
+    );
+    // pc?.createOffer()
+    //   .then((offer) => {
+    //     pc?.setLocalDescription(offer)
+    //       .then(() => {
+    //         socket?.send(
+    //           JSON.stringify({
+    //             event: "renegotiate",
+    //             data: JSON.stringify({
+    //               offer,
+    //               meetingId: meetId,
+    //             }),
+    //           })
+    //         );
+    //       })
+    //       .catch(console.log);
+    //   })
+    //   .catch(console.log);
+  };
+
+  // useEffect(() => {
+  //   let pc: null | RTCPeerConnection = null;
+
+  //   const streams: MediaStream[] = [];
+
+  //   (async () => {
+  //     if (allow.shareScreen) {
+  //       const stream = await navigator.mediaDevices.getDisplayMedia({
+  //         audio: true,
+  //         video: true,
+  //       });
+  //       streams.push(stream);
+  //     }
+
+  //     if (allow.audio || allow.video) {
+  //       const stream = await navigator.mediaDevices.getUserMedia({
+  //         audio: allow.audio,
+  //         video: allow.video,
+  //       });
+  // if (localVideoRef.current) {
+  //   localVideoRef.current.srcObject = stream;
+  // }
+  //       streams.push(stream);
+  //     }
+  //     pc = initiateConnection(streams);
+  //   })();
+
+  //   return () => {
+  //     if (pc) {
+  //       pc?.getSenders().forEach((sender) => {
+  //         pc?.removeTrack(sender);
+  //       });
+  //       pc?.close();
+  //     }
+  //     if (streams.length > 0) {
+  //       streams.forEach((mediaStream) => {
+  //         mediaStream.getTracks().forEach(function (track) {
+  //           track.stop();
+  //         });
+  //       });
+  //     }
+  //   };
+  // }, [allow]);
+
+  const initiateConnection = () =>
+    //_streams: MediaStream[]
+    {
+      if (!pc) {
+        return;
+      }
       setMediaStreams((prev) => {
-        prev[event.streams[0].id] = {
-          ...(prev[event.streams[0].id] || {}),
-          [event.track.kind]: {
-            stream: event.streams[0],
-            kind: event.track.kind,
-            updated: true,
-          },
-        };
-        return { ...prev };
+        Object.keys(prev).forEach((streamId) => {
+          if (prev[streamId]?.audio) {
+            prev[streamId].audio.updated = false;
+          }
+          if (prev[streamId]?.video) {
+            prev[streamId].video.updated = false;
+          }
+        });
+        return prev;
       });
+      // let pc = new RTCPeerConnection();
+      // pc?.
 
-      event.streams[0].onremovetrack = () => {
+      // pc?.getSenders().
+      // pc?.removeTrack()
+
+      pc.ontrack = function (event) {
+        console.log(`Getting ${event.track.kind} track: `, event.track.id);
         setMediaStreams((prev) => {
-          delete prev[event.streams[0].id][event.track.kind];
+          prev[event.streams[0].id] = {
+            ...(prev[event.streams[0].id] || {}),
+            [event.track.kind]: {
+              stream: event.streams[0],
+              kind: event.track.kind,
+              updated: true,
+            },
+          };
           return { ...prev };
         });
       };
 
-      // document.getElementById(event.track.id)?.remove();
-      // if (event.track.kind === "audio") {
-      //   let el = document.createElement("audio");
-      //   el.srcObject = event.streams[0];
-      //   el.autoplay = true;
-      //   el.controls = false;
-      //   // el.id = event.track.id;
-      //   document.getElementById("remoteVideos")?.appendChild(el);
+      // streams.forEach((stream) => {
+      //   stream.getTracks().forEach((track) => {
+      //     return pc?.addTrack(track, stream);
+      //   });
+      // });
 
-      //   event.track.onmute = function (event) {
-      //     el.play();
-      //   };
+      const ws = new WebSocket(`${process.env.NEXT_PUBLIC_API_URL}/websocket`);
 
-      //   event.streams[0].onremovetrack = ({ track }) => {
-      //     document.getElementById(track.id)?.remove();
-      //     if (el.parentNode) {
-      //       el.parentNode.removeChild(el);
-      //     }
-      //   };
-      //   return;
-      // }
-      // let el = document.createElement("video");
-      // let elName = document.createElement("p");
-      // el.srcObject = event.streams[0];
-      // el.autoplay = true;
-      // el.controls = false;
-      // el.className =
-      //   "w-[90%] aspect-video object-cover  bg-background rounded-lg";
-      // el.muted = true;
-      // el.id = event.streams[0].id;
-      // elName.innerText = event.streams[0].id;
-      // document.getElementById("remoteVideos")?.appendChild(el);
-      // document.getElementById("remoteVideos")?.appendChild(elName);
-
-      // event.track.onmute = function (event) {
-      //   el.play();
+      // pc.onnegotiationneeded = () => {
+      // ws.send(
+      //   JSON.stringify({
+      //     event: "renegotiate",
+      //     data: meetId,
+      //   })
+      // );
       // };
 
-      // event.streams[0].onremovetrack = ({ track }) => {
-      //   document.getElementById("remoteVideos")?.removeChild(el);
-      //   document.getElementById("remoteVideos")?.removeChild(elName);
-      // };
-    };
-
-    streams.forEach((stream) => {
-      stream.getTracks().forEach((track) => {
-        return pc?.addTrack(track, stream);
-      });
-    });
-
-    const ws = new WebSocket(`${process.env.NEXT_PUBLIC_API_URL}/websocket`);
-
-    pc.onicecandidate = (e) => {
-      if (!e.candidate) {
-        return;
-      }
-      ws.send(
-        JSON.stringify({
-          event: "candidate",
-          data: JSON.stringify({
-            candidate: e.candidate,
-            meetId,
-          }),
-        })
-      );
-    };
-
-    ws.onopen = () => {
-      setSocket(ws);
-    };
-    ws.onclose = function (evt) {
-      console.log("Ws closed");
-      // window.alert("Websocket has closed");
-    };
-
-    ws.onmessage = function (ev) {
-      let _users: { [key: string]: boolean } = {};
-      Object.keys(users).forEach((id) => {
-        _users[id] = true;
-      });
-      const { event, message, data } = JSON.parse(ev.data);
-      switch (event) {
-        case "error":
-          setJoining(false);
-          toast({
-            title: "Something went wrong",
-            description: message,
-          });
-          break;
-        case "offer":
-          const { offer } = data;
-          pc?.setRemoteDescription(JSON.parse(offer).offer)
-            .then(() => {
-              pc?.createAnswer()
-                .then((answer) => {
-                  pc?.setLocalDescription(answer);
-                  ws.send(
-                    JSON.stringify({
-                      event: "answer",
-                      data: JSON.stringify({
-                        meetId,
-                        answer: answer,
-                        audio: localStorage.getItem("audio") !== "false",
-                        video: localStorage.getItem("video") !== "false",
-                      }),
-                    })
-                  );
-                })
-                .catch(console.log);
-            })
-            .catch(console.log);
-
-          setUsers(
-            data.users.reduce((prev: any, curr: any) => {
-              _users[curr.userId] = true;
-              prev[curr.userId] = {
-                ...curr,
-                accepted: true,
-              };
-              return prev;
-            }, {} as { [key: string]: UserType })
-          );
-          setTracksMap(data.tracks);
-          setJoinedMeeting(true);
-          break;
-        case "candidate":
-          pc?.addIceCandidate(JSON.parse(data)).catch((err) => {
-            console.log(err);
-          });
-          break;
-        case "joining-meeting":
-          setJoinedMeeting(true);
-          setJoining(false);
-
-          break;
-        case "request-participant-join":
-          if (_users[data.userId]) {
-            ws.send(
-              JSON.stringify({
-                event: "join-meeting",
-                data: JSON.stringify({
-                  meetingId: meetId,
-                  token: localStorage.getItem("token"),
-                }),
-              })
-            );
-          } else {
-            toast({
-              title: `${data.name} wants to join`,
-              description: data.email,
-              action: (
-                <ToastAction
-                  altText="Try again"
-                  onClick={() => {
-                    ws.send(
-                      JSON.stringify({
-                        event: "accept-join-request",
-                        data: JSON.stringify({
-                          meetingId: meetId,
-                          ...data,
-                          ...allow,
-                        }),
-                      })
-                    );
-                    setUserRequests((prev) => {
-                      delete prev[data.userId];
-                      return { ...prev };
-                    });
-                  }}
-                  // variant="ghost"
-                >
-                  Accept
-                </ToastAction>
-              ),
-            });
-            // setUserRequests((prev) => {
-            //   return {
-            //     // ...prev[as].userId,
-            //     [data.userId]: {
-            //       ...data,
-            //       accepted: false,
-            //     },
-            //   };
-            // });
-          }
-          break;
-        case "new-participant":
-          _users[data.userId] = true;
-          setUsers((prev) => {
-            return {
-              ...prev,
-              [data.userId]: {
-                ...data,
-                accepted: true,
-              },
-            };
-          });
-        case "disconnect":
-          _users[data.userId] = false;
-          setUsers((prev) => {
-            delete prev[data.userId];
-            return { ...prev };
-          });
-        default:
-      }
-    };
-    if (joinedMeeting) {
-      ws.onopen = () => {
+      pc.onicecandidate = (e) => {
+        if (!e.candidate) {
+          return;
+        }
+        // if (pc?.connectionState === "connected") {
         ws.send(
           JSON.stringify({
-            event: "join-meeting",
+            event: "candidate",
             data: JSON.stringify({
-              meetingId: meetId,
-              token: localStorage.getItem("token"),
+              candidate: e.candidate,
+              meetId,
             }),
           })
         );
+        // }
       };
-    }
-    return pc;
-  };
+
+      ws.onopen = () => {
+        setSocket(ws);
+      };
+      ws.onclose = function (evt) {
+        console.log("Ws closed");
+        // window.alert("Websocket has closed");
+      };
+
+      ws.onmessage = function (ev) {
+        let _users: { [key: string]: boolean } = {};
+        Object.keys(users).forEach((id) => {
+          _users[id] = true;
+        });
+        const { event, message, data } = JSON.parse(ev.data);
+        switch (event) {
+          case "error":
+            setJoining(false);
+            toast({
+              title: "Something went wrong",
+              description: message,
+            });
+            break;
+          case "answer":
+            pc?.setRemoteDescription(data).catch(console.log);
+            break;
+          case "offer":
+            const { offer } = data;
+            pc?.setRemoteDescription(JSON.parse(offer))
+              .then(() => {
+                pc?.createAnswer()
+                  .then((answer) => {
+                    pc?.setLocalDescription(answer);
+                    ws.send(
+                      JSON.stringify({
+                        event: "answer",
+                        data: JSON.stringify({
+                          meetId,
+                          answer: answer,
+                          audio: localStorage.getItem("audio") !== "false",
+                          video: localStorage.getItem("video") !== "false",
+                        }),
+                      })
+                    );
+                  })
+                  .catch(console.log);
+              })
+              .catch(console.log);
+
+            setUsers(
+              data.users.reduce((prev: any, curr: any) => {
+                _users[curr.userId] = true;
+                prev[curr.userId] = {
+                  ...curr,
+                  accepted: true,
+                };
+                return prev;
+              }, {} as { [key: string]: UserType })
+            );
+            setTracksMap(data.tracks);
+            setJoinedMeeting(true);
+            break;
+          case "candidate":
+            if (pc?.remoteDescription) {
+              pc?.addIceCandidate(JSON.parse(data)).catch((err) => {
+                console.log(err);
+              });
+            }
+            break;
+          case "joining-meeting":
+            setJoinedMeeting(true);
+            setJoining(false);
+
+            break;
+          case "request-participant-join":
+            if (_users[data.userId]) {
+              ws.send(
+                JSON.stringify({
+                  event: "join-meeting",
+                  data: JSON.stringify({
+                    meetingId: meetId,
+                    token: localStorage.getItem("token"),
+                  }),
+                })
+              );
+            } else {
+              toast({
+                title: `${data.name} wants to join`,
+                description: data.email,
+                action: (
+                  <ToastAction
+                    altText="Try again"
+                    onClick={() => {
+                      ws.send(
+                        JSON.stringify({
+                          event: "accept-join-request",
+                          data: JSON.stringify({
+                            meetingId: meetId,
+                            ...data,
+                            ...allow,
+                          }),
+                        })
+                      );
+                    }}
+                    // variant="ghost"
+                  >
+                    Accept
+                  </ToastAction>
+                ),
+              });
+            }
+            break;
+          case "new-participant":
+            _users[data.userId] = true;
+            setUsers((prev) => {
+              return {
+                ...prev,
+                [data.userId]: {
+                  ...data,
+                  accepted: true,
+                },
+              };
+            });
+          case "disconnect":
+            _users[data.userId] = false;
+            setUsers((prev) => {
+              delete prev[data.userId];
+              return { ...prev };
+            });
+          default:
+        }
+      };
+      if (joinedMeeting) {
+        ws.onopen = () => {
+          ws.send(
+            JSON.stringify({
+              event: "join-meeting",
+              data: JSON.stringify({
+                meetingId: meetId,
+                token: localStorage.getItem("token"),
+              }),
+            })
+          );
+        };
+      }
+      return pc;
+    };
 
   function joinHandler() {
     setJoining(true);

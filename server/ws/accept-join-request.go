@@ -3,7 +3,6 @@ package ws
 import (
 	"context"
 	"encoding/json"
-	"log"
 )
 
 func AcceptJoinRequestHandler(ctx context.Context, userId string, payload string) {
@@ -16,7 +15,6 @@ func AcceptJoinRequestHandler(ctx context.Context, userId string, payload string
 		})
 		return
 	}
-	log.Println("Joining the meeting")
 	JoinMeetingRequestHandler(ctx, data.MeetingId, data.UserId)
 	for k := range connections[data.MeetingId].PeerConnections {
 		if k != userId && k != data.UserId {

@@ -3,6 +3,7 @@ package ws
 import (
 	"context"
 	"encoding/json"
+	"log"
 
 	"github.com/pion/rtp"
 	"github.com/pion/webrtc/v4"
@@ -10,15 +11,6 @@ import (
 
 func TrackHandler(tr *webrtc.TrackRemote, meetingId string, userId string) {
 	logger.Infof("Got remote track: MeetId=%s Kind=%s, ID=%s, PayloadType=%d", meetingId, tr.Kind(), tr.ID(), tr.PayloadType())
-	pc := connections[meetingId].PeerConnections[userId]
-
-	if !pc.Audio && tr.Kind() == webrtc.RTPCodecTypeAudio {
-		return
-	}
-
-	if !pc.Video && tr.Kind() == webrtc.RTPCodecTypeVideo {
-		return
-	}
 	trackLocal := addTrack(tr, meetingId, userId)
 	defer removeTrack(trackLocal, meetingId, userId)
 
@@ -63,6 +55,7 @@ func addTrack(t *webrtc.TrackRemote, meetingId string, userId string) *webrtc.Tr
 
 	meeting.TrackLocals[t.ID()] = trackLocal
 	meeting.TrackLocalsMap.Store(t.StreamID(), userId)
+	log.Println("Adding track: ", t.StreamID())
 	return trackLocal
 }
 
@@ -76,6 +69,7 @@ func removeTrack(t *webrtc.TrackLocalStaticRTP, meetingId string, userId string)
 	}()
 
 	delete(meeting.TrackLocals, t.ID())
+	log.Println("Removing track: ", t.StreamID())
 	meeting.TrackLocalsMap.Delete(t.StreamID())
 }
 

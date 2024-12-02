@@ -83,7 +83,12 @@ func WebsocketHandler(w http.ResponseWriter, r *http.Request) {
 			if err == nil {
 				JoinMeetingRequestHandler(r.Context(), meetingId, userId)
 			}
-		case "new-track":
+		case "renegotiate":
+			userId, exist := wsUserMap[c.Conn]
+			if exist {
+				Renegotiate(r.Context(), userId, message.Data)
+				// signalPeerConnections(message.Data, userId)
+			}
 			// userId, exist := wsUserMap[c.Conn]
 			// if exist {
 			// 	NewTrackHandler(r.Context(), userId, message.Data)
