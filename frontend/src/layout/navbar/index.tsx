@@ -3,7 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { useTheme } from "next-themes";
 import React, { useEffect, useState } from "react";
-import { Moon, Sun, SunMoon } from "lucide-react";
+import { Moon, Sun } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { deleteCookie } from "cookies-next";
 

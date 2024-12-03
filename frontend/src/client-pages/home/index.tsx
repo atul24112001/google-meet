@@ -6,21 +6,42 @@ import { useAuth } from "@/context/AuthContext";
 import React, { useState } from "react";
 import { Video } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useToast } from "@/hooks/use-toast";
 
 export default function ClientHomePage() {
   const [meetingLink, setMeetingLink] = useState("");
 
   const router = useRouter();
+  const { toast } = useToast();
 
   const { isAuthenticated, toggleShowAuthDialog, apiClient } = useAuth();
 
   const joinMeetingHandler = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    const pattern =
+      /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/;
+    const linkParts = meetingLink.split("/");
+    if (!pattern.test(meetingLink) || linkParts.length == 0) {
+      toast({
+        title: "Something went wrong",
+        description: "Invalid meeting link/code",
+      });
+      return;
+    }
+    const id = linkParts[linkParts.length - 1];
+    router.push(`/${id}`);
   };
 
   const startInstantMeeting = async () => {
-    const { data } = await apiClient.post("/meet");
-    router.push(`/${data.data.meetId}`);
+    try {
+      const { data } = await apiClient.post("/meet");
+      router.push(`/${data.data.meetId}`);
+    } catch (error) {
+      toast({
+        title: "Something went wrong",
+        description: (error as Error).message,
+      });
+    }
   };
 
   return (

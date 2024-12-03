@@ -7,7 +7,7 @@ function VideoPlayer({ stream, id, className, onRemove }: Props) {
     if (videoRef.current) {
       videoRef.current.srcObject = stream;
     }
-    stream.onremovetrack = (e) => {
+    stream.onremovetrack = () => {
       onRemove(id);
     };
   }, [stream]);

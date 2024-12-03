@@ -52,6 +52,11 @@ func WebsocketHandler(w http.ResponseWriter, r *http.Request) {
 		switch message.Event {
 		case "join-meeting":
 			JoinMeeting(r.Context(), c, *message)
+		case "text-message":
+			userId, exist := wsUserMap[c.Conn]
+			if exist {
+				TextMessageHandler(r.Context(), userId, message.Data)
+			}
 		case "accept-join-request":
 			userId, exist := wsUserMap[c.Conn]
 			if exist {

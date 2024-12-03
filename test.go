@@ -11,6 +11,14 @@ func (u *User) changeName(name string) {
 	u.name = name
 }
 
+//
+//
+//
+//
+//
+//
+//
+
 func main() {
 	user := User{
 		email: "atul@gmail.com",
