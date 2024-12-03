@@ -25,6 +25,7 @@ func Renegotiate(ctx context.Context, userId string, payload string) {
 		})
 		return
 	}
+	signalPeerConnections(renegotiatePayload.MeetingId, userId)
 	err := Offer(renegotiatePayload.MeetingId, userId)
 	if err != nil {
 		log.Println(err.Error())
@@ -33,41 +34,11 @@ func Renegotiate(ctx context.Context, userId string, payload string) {
 			"message": "Error while renegotiating",
 		})
 	}
-
-	// meeting, meetingExist := connections[renegotiatePayload.MeetingId]
-	// if meetingExist {
-	// 	pc, exist := meeting.PeerConnections[userId]
-	// 	if exist {
-	// 		err := pc.PeerConnection.SetRemoteDescription(renegotiatePayload.Offer)
-	// 		if err == nil {
-	// 			log.Println("Renegotiate: 30")
-	// 			answer, err := pc.PeerConnection.CreateAnswer(nil)
-	// 			if err == nil {
-	// 				log.Println("Renegotiate: 33")
-	// 				err = pc.PeerConnection.SetLocalDescription(answer)
-	// 				if err == nil {
-	// 					SendMessage(userId, map[string]interface{}{
-	// 						"event": "answer",
-	// 						"data":  answer,
-	// 					})
-	// 				}
-	// 				return
-	// 			}
-	// 		}
-	// 		log.Println("Renegotiate: ", err.Error())
-	// SendMessage(userId, map[string]string{
-	// 	"event":   "error",
-	// 	"message": "Error setting local description",
-	// })
-	// 		return
-	// 	}
-	// }
-
 }
 
 type RenegotiatePayload struct {
-	MeetingId string `json:"meetingId"`
-	// Offer     webrtc.SessionDescription `json:"offer"`
+	MeetingId string                    `json:"meetingId"`
+	Offer     webrtc.SessionDescription `json:"offer"`
 }
 
 type OfferQueue struct {

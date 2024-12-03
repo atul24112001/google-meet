@@ -87,12 +87,12 @@ func WebsocketHandler(w http.ResponseWriter, r *http.Request) {
 			userId, exist := wsUserMap[c.Conn]
 			if exist {
 				Renegotiate(r.Context(), userId, message.Data)
-				// signalPeerConnections(message.Data, userId)
 			}
-			// userId, exist := wsUserMap[c.Conn]
-			// if exist {
-			// 	NewTrackHandler(r.Context(), userId, message.Data)
-			// }
+		case "offer":
+			userId, exist := wsUserMap[c.Conn]
+			if exist {
+				HandleOffer(r.Context(), userId, message.Data)
+			}
 		}
 	}
 }
