@@ -11,6 +11,15 @@ func SafeWriteToUsers(key string, value *threadSafeWriter) {
 	_users[key] = value
 }
 
+func SafeUpdateMeetingToUsers(key string, meetingId string) {
+	user, exist := SafeReadFromUsers(key)
+	if exist {
+		user.MeetingId = meetingId
+		SafeWriteToUsers(key, user)
+	}
+
+}
+
 func SafeDeleteFromUsers(key string) {
 	_usersMutex.Lock()
 	defer _usersMutex.Unlock()

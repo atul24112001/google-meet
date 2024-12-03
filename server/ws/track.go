@@ -61,7 +61,10 @@ func addTrack(t *webrtc.TrackRemote, meetingId string, userId string) *webrtc.Tr
 
 // Remove from list of tracks and fire renegotation for all PeerConnections
 func removeTrack(t *webrtc.TrackLocalStaticRTP, meetingId string, userId string) {
-	meeting := connections[meetingId]
+	meeting, exist := connections[meetingId]
+	if !exist {
+		return
+	}
 	meeting.ListLock.Lock()
 	defer func() {
 		meeting.ListLock.Unlock()

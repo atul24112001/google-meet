@@ -149,6 +149,18 @@ func JoinMeetingRequestHandler(ctx context.Context, meetingId string, userId str
 		return
 	}
 
+	keys := []string{}
+	meeting.TrackLocalsMap.Range(func(key, value any) bool {
+		if value == userId {
+			keys = append(keys, key.(string))
+		}
+		return true
+	})
+
+	for _, v := range keys {
+		meeting.TrackLocalsMap.Delete(v)
+	}
+
 	meeting.ListLock.Lock()
 	meeting.PeerConnections[userId] = &PeerConnectionState{peerConnection, user}
 	// log.Println("userId-PeerConnections", userId, )
@@ -200,12 +212,11 @@ func JoinMeetingRequestHandler(ctx context.Context, meetingId string, userId str
 		logger.Infof("ICE connection state changed: %s meedId=%s", is, meetingId)
 	})
 
-	log.Println("User joinder: ", userId)
+	SafeUpdateMeetingToUsers(userId, meetingId)
 	SendMessage(userId, map[string]interface{}{
 		"event": "joining-meeting",
 		"data": map[string]interface{}{
 			"meetingId": meetingId,
-			// "users":     users,
 		},
 	})
 

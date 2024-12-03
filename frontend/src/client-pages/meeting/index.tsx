@@ -8,31 +8,20 @@ import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import Navbar from "@/layout/navbar";
 import "webrtc-adapter";
-import * as sdp from "sdp";
-// import { User } from "@/types";
 import {
   Expand,
-  Fullscreen,
   Maximize,
   Mic,
-  Mic2,
   MicOff,
   MonitorUp,
   MonitorX,
-  ScreenShare,
-  ScreenShareOff,
+  Phone,
   User,
   Video,
   VideoOff,
 } from "lucide-react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
 
 type UserType = {
   userId: string;
@@ -43,6 +32,8 @@ type UserType = {
 
 export default function ClientMeeting({ hostId, meetId, wss }: Props) {
   const localVideoRef = useRef<HTMLVideoElement>(null);
+  const stream = useRef<MediaStream | null>(null);
+  const pc = useRef<RTCPeerConnection | null>(null);
 
   const [fullScreen, setFullScreen] = useState("");
   const [allow, setAllow] = useState({
@@ -63,13 +54,9 @@ export default function ClientMeeting({ hostId, meetId, wss }: Props) {
       [key: string]: { stream: MediaStream; kind: string; updated: boolean };
     };
   }>({});
-  // const [localStreams, setLocalStreams] = useState<{
-  //   audio?: MediaStream;
-  //   video?: MediaStream;
-  //   screen?: MediaStream;
-  // }>({});
-  // const [pc, setPc] = useState<RTCPeerConnection | null>(null);
-  const pc = useRef<RTCPeerConnection | null>(null);
+
+  const router = useRouter();
+
   const { toast } = useToast();
 
   const { user } = useAuth();
@@ -78,12 +65,11 @@ export default function ClientMeeting({ hostId, meetId, wss }: Props) {
     if (joinedMeeting) {
       return () => {
         try {
+          stream.current?.getTracks().forEach((t) => t.stop());
           socket?.send(
             JSON.stringify({
               event: "leave",
-              data: {
-                meetingId: meetId,
-              },
+              data: "",
             })
           );
         } catch (error) {
@@ -94,159 +80,36 @@ export default function ClientMeeting({ hostId, meetId, wss }: Props) {
   }, [joinedMeeting]);
 
   useEffect(() => {
-    pc.current = new RTCPeerConnection({
-      iceServers: [
-        {
-          urls: [
-            "stun:stun1.l.google.com:19302",
-            "stun:stun2.l.google.com:19302",
-            "stun:stun.l.google.com:19302",
-            "stun:stun3.l.google.com:19302",
-            "stun:stun4.l.google.com:19302",
-            "stun:stun.services.mozilla.com",
-          ],
-        },
-      ],
-      iceCandidatePoolSize: 10,
-    });
-  }, []);
+    (async () => {
+      pc.current = await initiateConnection();
 
-  useEffect(() => {
-    if (pc.current) {
-      initiateConnection(pc.current);
-    }
-  }, [pc.current]);
-
-  useEffect(() => {
-    if (!pc.current) return;
-    let _stream: null | MediaStream = null;
-
-    const toggleAudio = async () => {
-      if (!pc.current) return;
-      const audioSender = pc.current
-        .getSenders()
-        .find((sender) => sender.track?.kind === "audio");
-      if (allow.audio) {
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({
-            audio: true,
-          });
-          _stream = stream;
-          const audioTrack = stream.getAudioTracks()[0];
-          if (audioSender) {
-            console.log("Replacing audio track:", audioTrack.id);
-            audioSender.replaceTrack(audioTrack);
-          } else {
-            console.log("Adding new audio track:", audioTrack.id);
-            pc.current.addTrack(audioTrack, stream);
-          }
-          renegotiate();
-        } catch (error) {
-          console.log(error);
-        }
-      } else if (audioSender) {
-        pc.current.removeTrack(audioSender);
-        renegotiate();
-      }
-    };
-    toggleAudio();
-
-    return () => {
-      _stream?.getTracks().forEach((track) => {
-        track.stop();
-      });
-    };
-  }, [allow.audio, pc]);
-
-  useEffect(() => {
-    if (!pc.current) return;
-    let _stream: null | MediaStream = null;
-
-    const toggleVideo = async () => {
-      if (!pc.current) return;
-      const videoSender = pc.current
-        .getSenders()
-        .find((sender) => sender.track?.kind === "video");
-      if (allow.video) {
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({
-            video: true,
-          });
-          if (localVideoRef.current) localVideoRef.current.srcObject = stream;
-          _stream = stream;
-          const videoTrack = stream.getVideoTracks()[0];
-          if (videoSender) {
-            console.log("Replacing video track:", videoTrack.id);
-            videoSender.replaceTrack(videoTrack);
-          } else {
-            console.log("Adding new video track:", videoTrack.id);
-            pc.current.addTrack(videoTrack, stream);
-          }
-          renegotiate();
-        } catch (error) {
-          console.error("Failed to toggle video:", error);
-        }
-      } else if (videoSender) {
-        console.log("Removing video sender:", videoSender.track?.id);
-        pc.current.removeTrack(videoSender);
-        renegotiate();
-      }
-    };
-    toggleVideo();
-
-    return () => {
-      console.log("Cleanup running for video");
-      _stream?.getTracks().forEach((track) => {
-        track.stop();
-        console.log("Stopping video track: ", track.id);
-      });
-    };
-  }, [allow.video, pc]);
+      return () => {
+        pc.current?.close();
+      };
+    })();
+  }, [allow.shareScreen, allow.video]);
 
   // useEffect(() => {
-  //   if (pc) {
-  //     const interval = setInterval(() => {
-  //       pc.getSenders().forEach((sender) => {
-  //         if (sender.track) {
-  //           console.log(
-  //             "Sending " + sender.track?.kind + " " + sender.track?.id
-  //           );
-  //         } else {
-  //           pc.removeTrack(sender);
-  //         }
-  //       });
-  //     }, 2000);
+  //   return () => {
+  //     if (stream.current) {
+  //       console.log("Removing");
+  //       stream.current.getTracks().forEach((t) => t.stop());
+  //     }
+  //   };
+  // }, [stream.current]);
 
-  //     return () => {
-  //       clearInterval(interval);
-  //     };
-  //   }
-  // }, [pc]);
-
-  const renegotiate = async () => {
-    if (!socket || !pc.current) return;
-    const offer = await pc.current.createOffer();
-    await pc.current.setLocalDescription(offer);
-
-    socket?.send(
-      JSON.stringify({
-        event: "offer",
-        data: JSON.stringify({
-          meetingId: meetId,
-          offer,
-        }),
-      })
-    );
-    // socket?.send(
-    //   JSON.stringify({
-    //     event: "renegotiate",
-    //     data: JSON.stringify({
-    //       meetingId: meetId,
-    //       offer,
-    //     }),
-    //   })
-    // );
-  };
+  useEffect(() => {
+    if (stream.current) {
+      const audioTracks = stream.current.getAudioTracks();
+      const videoTracks = stream.current.getVideoTracks();
+      if (audioTracks.length > 0) {
+        audioTracks[0].enabled = allow.audio;
+      }
+      if (videoTracks.length > 0) {
+        videoTracks[0].enabled = allow.video;
+      }
+    }
+  }, [allow.video, allow.audio]);
 
   const handleIncomingMessages = (ws: WebSocket, _pc: RTCPeerConnection) => {
     ws.onmessage = (ev) => {
@@ -394,20 +257,47 @@ export default function ClientMeeting({ hostId, meetId, wss }: Props) {
     };
   };
 
-  const initiateConnection = (_pc: RTCPeerConnection) => {
-    if (!_pc) {
-      return;
+  const initiateConnection = async () => {
+    setMediaStreams({});
+    if (stream.current) {
+      stream.current.getTracks().forEach((t) => t.stop());
+      stream.current = null;
     }
-    setMediaStreams((prev) => {
-      Object.keys(prev).forEach((streamId) => {
-        if (prev[streamId]?.audio) {
-          prev[streamId].audio.updated = false;
-        }
-        if (prev[streamId]?.video) {
-          prev[streamId].video.updated = false;
-        }
+    const _mainStream = new MediaStream();
+    const _stream = await navigator.mediaDevices.getUserMedia({
+      audio: true,
+      video: allow.shareScreen ? false : allow.video,
+    });
+
+    if (allow.shareScreen) {
+      const _screenStream = await navigator.mediaDevices.getDisplayMedia({
+        video: true,
       });
-      return prev;
+      _screenStream.getTracks().forEach((track) => {
+        _mainStream.addTrack(track);
+        // _screenStream.removeTrack(track);
+      });
+    }
+
+    _stream.getTracks().forEach((track) => {
+      _mainStream.addTrack(track);
+      // _stream.removeTrack(track);
+    });
+
+    const _pc = new RTCPeerConnection({
+      iceServers: [
+        {
+          urls: [
+            "stun:stun1.l.google.com:19302",
+            "stun:stun2.l.google.com:19302",
+            "stun:stun.l.google.com:19302",
+            "stun:stun3.l.google.com:19302",
+            "stun:stun4.l.google.com:19302",
+            "stun:stun.services.mozilla.com",
+          ],
+        },
+      ],
+      iceCandidatePoolSize: 10,
     });
 
     _pc.ontrack = function (event) {
@@ -424,6 +314,20 @@ export default function ClientMeeting({ hostId, meetId, wss }: Props) {
         return { ...prev };
       });
     };
+
+    const _audioTrack = _mainStream.getAudioTracks()[0];
+    _pc.addTrack(_audioTrack, _mainStream);
+
+    if (allow.video || allow.shareScreen) {
+      const _videoTrack = _mainStream.getVideoTracks()[0];
+      _pc.addTrack(_videoTrack, _mainStream);
+    }
+
+    if (localVideoRef.current) {
+      localVideoRef.current.srcObject = _mainStream;
+    }
+
+    stream.current = _mainStream;
 
     const ws = new WebSocket(`${process.env.NEXT_PUBLIC_API_URL}/websocket`);
 
@@ -448,7 +352,6 @@ export default function ClientMeeting({ hostId, meetId, wss }: Props) {
     };
     ws.onclose = function (evt) {
       console.log("Ws closed");
-      // window.alert("Websocket has closed");
     };
 
     handleIncomingMessages(ws, _pc);
@@ -465,7 +368,8 @@ export default function ClientMeeting({ hostId, meetId, wss }: Props) {
         );
       };
     }
-    return pc;
+
+    return _pc;
   };
 
   function joinHandler() {
@@ -481,43 +385,56 @@ export default function ClientMeeting({ hostId, meetId, wss }: Props) {
     );
   }
 
+  function disconnect() {
+    pc.current?.close();
+    stream.current?.getTracks().forEach((t) => {
+      t.stop();
+    });
+    socket?.send(
+      JSON.stringify({
+        event: "leave",
+        data: "",
+      })
+    );
+    router.push("/");
+  }
+
   const streamingUsers = useMemo(() => {
     return Object.values(tracksMap);
   }, [tracksMap]);
 
   const mediaButtons = useMemo(() => {
-    return null;
-    // return (
-    //   <>
-    //     <Button
-    //       onClick={() => {
-    //         setAllow((prev) => ({ ...prev, audio: !prev.audio }));
-    //       }}
-    //       size="icon"
-    //       variant="ghost"
-    //     >
-    //       {allow.audio ? <Mic /> : <MicOff />}
-    //     </Button>
-    //     <Button
-    //       onClick={() => {
-    //         setAllow((prev) => ({ ...prev, video: !prev.video }));
-    //       }}
-    //       size="icon"
-    //       variant="ghost"
-    //     >
-    //       {allow.video ? <Video /> : <VideoOff />}
-    //     </Button>
-    //     <Button
-    //       onClick={() => {
-    //         setAllow((prev) => ({ ...prev, shareScreen: !prev.shareScreen }));
-    //       }}
-    //       size="icon"
-    //       variant="ghost"
-    //     >
-    //       {allow.shareScreen ? <MonitorX /> : <MonitorUp />}
-    //     </Button>
-    //   </>
-    // );
+    return (
+      <>
+        <Button
+          onClick={() => {
+            setAllow((prev) => ({ ...prev, audio: !prev.audio }));
+          }}
+          size="icon"
+          variant="ghost"
+        >
+          {allow.audio ? <Mic /> : <MicOff />}
+        </Button>
+        <Button
+          onClick={() => {
+            setAllow((prev) => ({ ...prev, video: !prev.video }));
+          }}
+          size="icon"
+          variant="ghost"
+        >
+          {allow.video ? <Video /> : <VideoOff />}
+        </Button>
+        <Button
+          onClick={() => {
+            setAllow((prev) => ({ ...prev, shareScreen: !prev.shareScreen }));
+          }}
+          size="icon"
+          variant="ghost"
+        >
+          {allow.shareScreen ? <MonitorX /> : <MonitorUp />}
+        </Button>
+      </>
+    );
   }, [allow]);
 
   return joinedMeeting ? (
@@ -545,31 +462,18 @@ export default function ClientMeeting({ hostId, meetId, wss }: Props) {
             <div key={streamId}>
               <div className="relative w-[340px] flex-1 mb-4 md:mb-0 flex justify-center items-center">
                 {!stream["video"]?.updated && users[tracksMap[streamId]] && (
-                  <div className="w-[90%] aspect-video flex justify-center flex-col items-center object-cover  bg-[#383838] text-white rounded-lg">
+                  <div className="w-[100%] aspect-video flex justify-center flex-col items-center object-cover  bg-[#383838] text-white rounded-lg">
                     <User />
                     <h1>{users[tracksMap[streamId]].name}</h1>
                   </div>
                 )}
 
                 {stream["video"]?.updated && (
-                  <div
-                  // onClick={() => {
-                  //   setFullScreen((prev) =>
-                  //     streamId === prev ? "" : streamId
-                  //   );
-                  // }}
-                  >
-                    {/* <div
-                      className={`${
-                        fullScreen === streamId ? "fixed" : "absolute"
-                      }  hidden hover:flex top-0 bottom-0 left-0 right-0  z-20 text-white justify-center items-center `}
-                    >
-                    
-                    </div> */}
+                  <div>
                     <VideoPlayer
                       className={`${
                         fullScreen === streamId
-                          ? "fixed  z-10 top-0 bottom-0 left-0 right-0"
+                          ? "fixed  z-20 top-0 bottom-0 left-0 right-0"
                           : ""
                       } w-[100%] aspect-video object-cover bg-background rounded-lg`}
                       id={streamId}
@@ -594,8 +498,8 @@ export default function ClientMeeting({ hostId, meetId, wss }: Props) {
                 {stream["video"]?.updated && users[tracksMap[streamId]] && (
                   <div
                     className={`${
-                      fullScreen === streamId ? "fixed" : "absolute"
-                    }  bg-[#00000050] text-center w-full px-2 flex text-white items-center justify-between gap-2 top-0 left-0 z-30`}
+                      fullScreen === streamId ? "fixed z-30" : "absolute z-10"
+                    }  bg-[#00000050] text-center w-full px-2 flex text-white items-center justify-between gap-2 top-0 left-0 `}
                   >
                     <p className="text-sm">{users[tracksMap[streamId]].name}</p>
                     {fullScreen === streamId && (
@@ -663,19 +567,11 @@ export default function ClientMeeting({ hostId, meetId, wss }: Props) {
           );
         })}
       </div>
-      {/* <div>
-        
-        {Object.values(userRequests).map((user) => {
-          return (
-            <div key={user.userId}>
-              <h2>{user.name}</h2>
-             
-            </div>
-          );
-        })}
-      </div> */}
       <div className="fixed  bottom-0 left-0 right-0 bg-transparent py-3 flex justify-center items-center gap-2  z-10">
         {mediaButtons}
+        <Button onClick={disconnect} size="icon" variant="destructive">
+          <Phone />
+        </Button>
       </div>
     </div>
   ) : (
