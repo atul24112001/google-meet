@@ -102,22 +102,8 @@ export default function ClientMeeting({ hostId, meetId }: Props) {
             try {
               if (_pc?.signalingState !== "stable") {
                 console.warn("Signaling state not stable. Resetting...");
-                // _pc.iceGatheringState === "complete"
-
                 await _pc?.setLocalDescription({ type: "rollback" });
               }
-              // const _offer = new RTCSessionDescription(offer);
-              // const _offer = sdp.parseSctpDescription(JSON.parse(offer).sdp);
-
-              // const isValidOffer = sdp.isValidSDP(_offer);
-              // if (!isValidOffer) {
-              //   console.log("invalid sdp");
-              //   toast({
-              //     title: "Invalid sdp",
-              //   });
-              //   return;
-              // }
-              // console.log({ _offer });
               await pc.current?.setRemoteDescription(JSON.parse(offer));
               const answer = await pc.current?.createAnswer();
               await pc.current?.setLocalDescription(answer);
@@ -139,14 +125,14 @@ export default function ClientMeeting({ hostId, meetId }: Props) {
           })();
 
           setUsers(
-            data.users.reduce((prev: Users, curr: UserType) => {
+            data.users?.reduce((prev: Users, curr: UserType) => {
               _users[curr.userId] = true;
               prev[curr.userId] = {
                 ...curr,
                 accepted: true,
               };
               return prev;
-            }, {} as Users)
+            }, {} as Users) || {}
           );
           setTracksMap(data.tracks);
           setJoinedMeeting(true);
@@ -159,9 +145,7 @@ export default function ClientMeeting({ hostId, meetId }: Props) {
           }
           break;
         case "joining-meeting":
-          setJoinedMeeting(true);
-          setJoining(false);
-          if (user?.id === hostId) {
+          if (user?.id === hostId && !joinedMeeting) {
             toast({
               title: "Meeting joined, share the link for others to join",
               description: meetId,
@@ -180,6 +164,8 @@ export default function ClientMeeting({ hostId, meetId }: Props) {
               ),
             });
           }
+          setJoinedMeeting(true);
+          setJoining(false);
           break;
         case "request-participant-join":
           if (_users[data.userId]) {
@@ -249,7 +235,7 @@ export default function ClientMeeting({ hostId, meetId }: Props) {
     const _mainStream = new MediaStream();
     const _stream = await navigator.mediaDevices.getUserMedia({
       audio: true,
-      video: allow.shareScreen ? false : allow.video,
+      video: allow.video,
     });
 
     if (allow.shareScreen) {
@@ -268,18 +254,18 @@ export default function ClientMeeting({ hostId, meetId }: Props) {
     });
 
     const _pc = new RTCPeerConnection({
-      iceServers: [
-        {
-          urls: [
-            "stun:stun1.l.google.com:19302",
-            "stun:stun2.l.google.com:19302",
-            "stun:stun.l.google.com:19302",
-            "stun:stun3.l.google.com:19302",
-            "stun:stun4.l.google.com:19302",
-            "stun:stun.services.mozilla.com",
-          ],
-        },
-      ],
+      // iceServers: [
+      //   {
+      //     urls: [
+      //       "stun:stun1.l.google.com:19302",
+      //       "stun:stun2.l.google.com:19302",
+      //       "stun:stun.l.google.com:19302",
+      //       "stun:stun3.l.google.com:19302",
+      //       "stun:stun4.l.google.com:19302",
+      //       "stun:stun.services.mozilla.com",
+      //     ],
+      //   },
+      // ],
       iceCandidatePoolSize: 10,
     });
 
@@ -301,10 +287,9 @@ export default function ClientMeeting({ hostId, meetId }: Props) {
     const _audioTrack = _mainStream.getAudioTracks()[0];
     _pc.addTrack(_audioTrack, _mainStream);
 
-    if (allow.video || allow.shareScreen) {
-      const _videoTrack = _mainStream.getVideoTracks()[0];
-      _pc.addTrack(_videoTrack, _mainStream);
-    }
+    _mainStream.getVideoTracks().map((track) => {
+      _pc.addTrack(track, _mainStream);
+    });
 
     if (localVideoRef.current) {
       localVideoRef.current.srcObject = _mainStream;
