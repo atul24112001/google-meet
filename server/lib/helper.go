@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"sync"
@@ -85,21 +86,18 @@ var getLocation sync.Once
 var Host string
 
 func GetInstanceLocation(port string) string {
-	// getLocation.Do(func() {
-	// 	response, err := http.Get("https://api.ipify.org")
-	// 	if err != nil {
-	// 		log.Panic("Error fetching location")
-	// 	}
-	// 	responseData, err := io.ReadAll(response.Body)
-	// 	if err != nil {
-	// 		log.Panic("Error fetching location")
-	// 	}
-	// 	Host = fmt.Sprintf("http://%s%s", string(responseData), port)
-	// })
+	getLocation.Do(func() {
+		response, err := http.Get("https://api.ipify.org")
+		if err != nil {
+			log.Panic("Error fetching location")
+		}
+		responseData, err := io.ReadAll(response.Body)
+		if err != nil {
+			log.Panic("Error fetching location")
+		}
+		Host = fmt.Sprintf("http://%s%s", string(responseData), port)
+	})
 
-	// if Host == fmt.Sprintf("http://106.222.212.0%s", port) {
-	Host = fmt.Sprintf("http://localhost%s", port)
-	// }
 	return Host
 }
 
