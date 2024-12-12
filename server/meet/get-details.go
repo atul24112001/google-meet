@@ -1,7 +1,6 @@
 package meet
 
 import (
-	"fmt"
 	"google-meet/lib"
 	"google-meet/middleware"
 	"google-meet/query"
@@ -27,7 +26,7 @@ func GetMeetDetails(w http.ResponseWriter, r *http.Request) {
 	}
 	wssUrl := os.Getenv("SERVER_HOST")
 
-	redisKey := fmt.Sprintf("google-meet:host:%s", meetId.String())
+	// redisKey := fmt.Sprintf("google-meet:host:%s", meetId.String())
 
 	meet, err := query.GetMeetingById(r.Context(), meetId.String())
 	if err != nil {
@@ -35,16 +34,16 @@ func GetMeetDetails(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if meet.Type == "meeting" {
-		cmd := lib.RedisClient.Get(r.Context(), redisKey)
-		err = cmd.Err()
-		if err == nil {
-			url, err := cmd.Result()
-			if err == nil {
-				wssUrl = url
-			}
-		}
-	}
+	// if meet.Type == "meeting" {
+	// 	cmd := lib.RedisClient.Get(r.Context(), redisKey)
+	// 	err = cmd.Err()
+	// 	if err == nil {
+	// 		url, err := cmd.Result()
+	// 		if err == nil {
+	// 			wssUrl = url
+	// 		}
+	// 	}
+	// }
 
 	// if user.Id == meet.UserId {
 	// 	meet.AllowAudio = true;
