@@ -13,7 +13,6 @@ import MessageBox from "./message-box";
 export default function ClientMeeting({
   hostId,
   meetId,
-  wss,
   videoAllowed,
   audioAllowed,
   screenShareAllowed,
