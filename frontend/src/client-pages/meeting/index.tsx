@@ -1,34 +1,27 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
-import { useAuth } from "@/context/AuthContext";
+import { ToastAction } from "@/components/ui/toast";
 import { useToast } from "@/hooks/use-toast";
-import Navbar from "@/layout/navbar";
-// import { User } from "@/types";
-import {
-  Mic,
-  Mic2,
-  MicOff,
-  MonitorUp,
-  MonitorX,
-  ScreenShare,
-  ScreenShareOff,
-  User,
-  Video,
-  VideoOff,
-} from "lucide-react";
-import { useRouter } from "next/navigation";
-import React, { useEffect, useRef, useState } from "react";
+import "webrtc-adapter";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import Footer from "./footer";
+import JoinScreen from "./join-screen";
+import MediaPanel from "./media-pannel";
+import { useAuth } from "@/context/AuthContext";
+import MessageBox from "./message-box";
 
-type UserType = {
-  userId: string;
-  name: string;
-  email: string;
-  accepted: boolean;
-};
-
-export default function ClientMeeting({ hostId, meetId, wss }: Props) {
+export default function ClientMeeting({
+  hostId,
+  meetId,
+  wss,
+  videoAllowed,
+  audioAllowed,
+  screenShareAllowed,
+}: Props) {
   const localVideoRef = useRef<HTMLVideoElement>(null);
+  const stream = useRef<MediaStream | null>(null);
+  const pc = useRef<RTCPeerConnection | null>(null);
+
   const [allow, setAllow] = useState({
     audio: true,
     video: true,
@@ -36,29 +29,26 @@ export default function ClientMeeting({ hostId, meetId, wss }: Props) {
   });
   const [joinedMeeting, setJoinedMeeting] = useState(false);
   const [joining, setJoining] = useState(false);
-  const [users, setUsers] = useState<{
-    [key: string]: UserType;
-  }>({});
-  const [userRequests, setUserRequests] = useState<{
-    [key: string]: UserType;
-  }>({});
-  const [tracksMap, setTracksMap] = useState<{ [key: string]: string }>({});
+  const [users, setUsers] = useState<Users>({});
+  const [tracksMap, setTracksMap] = useState<TrackMap>({});
 
   const [socket, setSocket] = useState<WebSocket | null>(null);
-  const { toast } = useToast();
+  const [mediaStreams, setMediaStreams] = useState<MediaStreamMap>({});
+  const [showMessages, setShowMessages] = useState(false);
+  const [messages, setMessages] = useState<Message[]>([]);
 
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
+  const { toast } = useToast();
 
   useEffect(() => {
     if (joinedMeeting) {
       return () => {
         try {
+          stream.current?.getTracks().forEach((t) => t.stop());
           socket?.send(
             JSON.stringify({
               event: "leave",
-              data: {
-                meetingId: meetId,
-              },
+              data: "",
             })
           );
         } catch (error) {
@@ -68,167 +58,44 @@ export default function ClientMeeting({ hostId, meetId, wss }: Props) {
     }
   }, [joinedMeeting]);
 
-  useEffect(() => {
-    let pc: null | RTCPeerConnection = null;
-
-    document.getElementById("remoteVideos")?.childNodes.forEach((node) => {
-      document.getElementById("remoteVideos")?.removeChild(node);
-    });
-    const streams: MediaStream[] = [];
-
-    (async () => {
-      if (allow.shareScreen) {
-        const stream = await navigator.mediaDevices.getDisplayMedia({
-          audio: true,
-          video: true,
-        });
-        streams.push(stream);
-      }
-
-      if (allow.audio || allow.video) {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: allow.audio,
-          video: allow.video,
-        });
-        if (localVideoRef.current) {
-          localVideoRef.current.srcObject = stream;
-        }
-        streams.push(stream);
-      }
-      pc = initiateConnection(streams);
-    })();
-
-    // if (!allow.audio && !allow.video) {
-    //   pc = initiateConnection([]);
-    // } else if(allow.shareScreen){
-    //   navigator.mediaDevices.getDisplayMedia({
-    //     audio: true,
-    //     video: true,
-    //   }).then((stream) => {
-    //     pc = initiateConnection([stream]);
-    //     mediaStream = stream;
-    //   })
-    // } else {
-    //   navigator.mediaDevices.getUserMedia({audio: allow.audio, video: allow.video}).then((stream) => {
-    // if (localVideoRef.current) {
-    //   localVideoRef.current.srcObject = stream;
-    // }
-
-    //     pc = initiateConnection([stream]);
-    //     mediaStream = stream;
-    //   });
-    // }
-
-    return () => {
-      if (pc) {
-        pc.getSenders().forEach((sender) => {
-          pc?.removeTrack(sender);
-        });
-        pc?.close();
-      }
-      if (streams.length > 0) {
-        streams.forEach((mediaStream) => {
-          mediaStream.getTracks().forEach(function (track) {
-            document.getElementById(track.id)?.remove();
-            track.stop();
-          });
-        });
-      }
-    };
-  }, [allow]);
-
-  const initiateConnection = (streams: MediaStream[]) => {
-    let pc = new RTCPeerConnection();
-
-    pc.ontrack = function (event) {
-      // setMediaStream(prev => {
-      // event.streams[0].id
-      // })
-      document.getElementById(event.track.id)?.remove();
-      if (event.track.kind === "audio") {
-        let el = document.createElement("audio");
-        el.srcObject = event.streams[0];
-        el.autoplay = true;
-        el.controls = false;
-        // el.id = event.track.id;
-        document.getElementById("remoteVideos")?.appendChild(el);
-
-        event.track.onmute = function (event) {
-          el.play();
-        };
-
-        event.streams[0].onremovetrack = ({ track }) => {
-          document.getElementById(track.id)?.remove();
-          if (el.parentNode) {
-            el.parentNode.removeChild(el);
-          }
-        };
-        return;
-      }
-      let el = document.createElement("video");
-      let elName = document.createElement("p");
-      el.srcObject = event.streams[0];
-      el.autoplay = true;
-      el.controls = false;
-      el.className =
-        "w-[90%] aspect-video object-cover  bg-background rounded-lg";
-      el.muted = true;
-      el.id = event.streams[0].id;
-      elName.innerText = event.streams[0].id;
-      document.getElementById("remoteVideos")?.appendChild(el);
-      document.getElementById("remoteVideos")?.appendChild(elName);
-
-      event.track.onmute = function (event) {
-        el.play();
-      };
-
-      event.streams[0].onremovetrack = ({ track }) => {
-        document.getElementById("remoteVideos")?.removeChild(el);
-        document.getElementById("remoteVideos")?.removeChild(elName);
-      };
-    };
-
-    const ws = new WebSocket(`${process.env.NEXT_PUBLIC_API_URL}/websocket`);
-
-    pc.onicecandidate = (e) => {
-      if (!e.candidate) {
-        return;
-      }
-      ws.send(
-        JSON.stringify({
-          event: "candidate",
-          data: JSON.stringify({
-            candidate: e.candidate,
-            meetId,
-          }),
-        })
-      );
-    };
-
-    ws.onopen = () => {
-      setSocket(ws);
-      streams.forEach((stream) => {
-        stream.getTracks().forEach((track) => {
-          ws.send(
-            JSON.stringify({
-              event: "new-track",
-              data: JSON.stringify({
-                meetingId: meetId,
-                userId: user?.id,
-                trackId: track.id,
-              }),
-            })
-          );
-          return pc?.addTrack(track, stream);
-        });
+  useLayoutEffect(() => {
+    if (hostId === user?.id) {
+      setAllow({
+        audio: true,
+        shareScreen: false,
+        video: true,
       });
-    };
-    ws.onclose = function (evt) {
-      window.alert("Websocket has closed");
-    };
+    }
+  }, [user?.id]);
 
-    ws.onmessage = function (ev) {
-      let _users: { [key: string]: boolean } = {};
+  useEffect(() => {
+    if (isAuthenticated) {
+      (async () => {
+        pc.current = await initiateConnection();
+
+        return () => {
+          pc.current?.close();
+        };
+      })();
+    }
+  }, [allow.shareScreen, allow.video, isAuthenticated]);
+
+  useEffect(() => {
+    if (stream.current) {
+      const audioTracks = stream.current.getAudioTracks();
+      const videoTracks = stream.current.getVideoTracks();
+      if (audioTracks.length > 0) {
+        audioTracks[0].enabled = allow.audio;
+      }
+      if (videoTracks.length > 0) {
+        videoTracks[0].enabled = allow.video;
+      }
+    }
+  }, [allow.video, allow.audio]);
+
+  const handleIncomingMessages = (ws: WebSocket, _pc: RTCPeerConnection) => {
+    ws.onmessage = (ev) => {
+      const _users: { [key: string]: boolean } = {};
       Object.keys(users).forEach((id) => {
         _users[id] = true;
       });
@@ -241,46 +108,84 @@ export default function ClientMeeting({ hostId, meetId, wss }: Props) {
             description: message,
           });
           break;
+        case "answer":
+          _pc?.setRemoteDescription(JSON.parse(data)).catch(console.log);
+          break;
+        case "text-message":
+          setMessages((prev) => {
+            return [...prev, data];
+          });
         case "offer":
           const { offer } = data;
-          pc?.setRemoteDescription(JSON.parse(offer).offer)
-            .then(() => {
-              pc?.createAnswer()
-                .then((answer) => {
-                  pc?.setLocalDescription(answer);
-                  ws.send(
-                    JSON.stringify({
-                      event: "answer",
-                      data: JSON.stringify({
-                        meetId,
-                        answer: answer,
-                        audio: localStorage.getItem("audio") !== "false",
-                        video: localStorage.getItem("video") !== "false",
-                      }),
-                    })
-                  );
+          (async () => {
+            try {
+              if (_pc?.signalingState !== "stable") {
+                console.warn("Signaling state not stable. Resetting...");
+                await _pc?.setLocalDescription({ type: "rollback" });
+              }
+              await pc.current?.setRemoteDescription(JSON.parse(offer));
+              const answer = await pc.current?.createAnswer();
+              await pc.current?.setLocalDescription(answer);
+
+              ws.send(
+                JSON.stringify({
+                  event: "answer",
+                  data: JSON.stringify({
+                    meetId,
+                    answer: answer,
+                    audio: localStorage.getItem("audio") !== "false",
+                    video: localStorage.getItem("video") !== "false",
+                  }),
                 })
-                .catch(console.log);
-            })
-            .catch(console.log);
-          setUsers((prev) => {
-            return data.users.map((u: UserType) => {
-              _users[u.userId] = true;
-              return { ...u, accepted: true };
-            });
-          });
+              );
+            } catch (error) {
+              console.log("267", error);
+            }
+          })();
+
+          setUsers(
+            data.users?.reduce((prev: Users, curr: UserType) => {
+              _users[curr.userId] = true;
+              prev[curr.userId] = {
+                ...curr,
+                accepted: true,
+              };
+              return prev;
+            }, {} as Users) || {}
+          );
+
           setTracksMap(data.tracks);
           setJoinedMeeting(true);
           break;
         case "candidate":
-          pc?.addIceCandidate(JSON.parse(data)).catch((err) => {
-            console.log(err);
-          });
+          if (_pc?.remoteDescription) {
+            _pc?.addIceCandidate(JSON.parse(data)).catch((err) => {
+              console.log(err);
+            });
+          }
           break;
         case "joining-meeting":
+          if (user?.id === hostId && !joinedMeeting) {
+            toast({
+              title: "Meeting joined, share the link for others to join",
+              description: meetId,
+              duration: 10000,
+              action: (
+                <ToastAction
+                  onClick={() => {
+                    navigator.clipboard.writeText(
+                      `${process.env.NEXT_PUBLIC_FRONTEND_URL}/${meetId}`
+                    );
+                  }}
+                  altText="Goto schedule to undo"
+                >
+                  Copy
+                </ToastAction>
+              ),
+            });
+          }
           setJoinedMeeting(true);
           setJoining(false);
-
           break;
         case "request-participant-join":
           if (_users[data.userId]) {
@@ -294,14 +199,28 @@ export default function ClientMeeting({ hostId, meetId, wss }: Props) {
               })
             );
           } else {
-            setUserRequests((prev) => {
-              return {
-                ...prev,
-                [data.userId]: {
-                  ...data,
-                  accepted: false,
-                },
-              };
+            toast({
+              title: `${data.name} wants to join`,
+              description: data.email,
+              action: (
+                <ToastAction
+                  altText="Try again"
+                  onClick={() => {
+                    ws.send(
+                      JSON.stringify({
+                        event: "accept-join-request",
+                        data: JSON.stringify({
+                          meetingId: meetId,
+                          ...data,
+                          ...allow,
+                        }),
+                      })
+                    );
+                  }}
+                >
+                  Accept
+                </ToastAction>
+              ),
             });
           }
           break;
@@ -325,6 +244,94 @@ export default function ClientMeeting({ hostId, meetId, wss }: Props) {
         default:
       }
     };
+  };
+
+  const initiateConnection = async () => {
+    setMediaStreams({});
+    if (stream.current) {
+      stream.current.getTracks().forEach((t) => t.stop());
+      stream.current = null;
+    }
+    const _mainStream = new MediaStream();
+
+    if (allow.audio || allow.video) {
+      const _stream = await navigator.mediaDevices.getUserMedia({
+        audio: allow.audio,
+        video: allow.shareScreen ? false : allow.video,
+      });
+
+      _stream.getTracks().forEach((track) => {
+        _mainStream.addTrack(track);
+      });
+    }
+
+    if (allow.shareScreen) {
+      const _screenStream = await navigator.mediaDevices.getDisplayMedia({
+        video: true,
+      });
+      _screenStream.getTracks().forEach((track) => {
+        _mainStream.addTrack(track);
+      });
+    }
+
+    const _pc = new RTCPeerConnection({
+      iceCandidatePoolSize: 10,
+    });
+
+    _pc.ontrack = function (event) {
+      setMediaStreams((prev) => {
+        prev[event.streams[0].id] = {
+          ...(prev[event.streams[0].id] || {}),
+          [event.track.kind]: {
+            stream: event.streams[0],
+            kind: event.track.kind,
+            updated: true,
+          },
+        };
+        return { ...prev };
+      });
+    };
+
+    // const _audioTrack = _mainStream.getAudioTracks()[0];
+    // if (_audioTrack) {
+    //   _pc.addTrack(_audioTrack, _mainStream);
+    // }
+
+    _mainStream.getTracks().map((track) => {
+      _pc.addTrack(track, _mainStream);
+    });
+
+    if (localVideoRef.current) {
+      localVideoRef.current.srcObject = _mainStream;
+    }
+
+    stream.current = _mainStream;
+
+    const ws = new WebSocket(`${wss}/websocket`);
+
+    _pc.onicecandidate = (e) => {
+      if (!e.candidate) {
+        return;
+      }
+      ws.send(
+        JSON.stringify({
+          event: "candidate",
+          data: JSON.stringify({
+            candidate: e.candidate,
+            meetId,
+          }),
+        })
+      );
+    };
+
+    ws.onopen = () => {
+      setSocket(ws);
+    };
+    ws.onclose = function () {
+      console.log("Ws closed");
+    };
+
+    handleIncomingMessages(ws, _pc);
     if (joinedMeeting) {
       ws.onopen = () => {
         ws.send(
@@ -333,32 +340,14 @@ export default function ClientMeeting({ hostId, meetId, wss }: Props) {
             data: JSON.stringify({
               meetingId: meetId,
               token: localStorage.getItem("token"),
-              // audio: allow.audio,
-              // video: allow.video,
             }),
           })
         );
       };
     }
-    return pc;
-  };
 
-  // useEffect(() => {
-  // if (allow.audio || allow.video) {
-  //   socket?.send(
-  //     JSON.stringify({
-  //       event: "change-track",
-  //       data: JSON.stringify({
-  //         audio: allow.audio,
-  //         video: allow.video,
-  //         meetingId: meetId,
-  //       }),
-  //     })
-  //   );
-  //   localStorage.setItem("audio", `${allow.audio}`);
-  //   localStorage.setItem("video", `${allow.video}`);
-  // }
-  // }, [allow.audio, allow.video]);
+    return _pc;
+  };
 
   function joinHandler() {
     setJoining(true);
@@ -368,149 +357,92 @@ export default function ClientMeeting({ hostId, meetId, wss }: Props) {
         data: JSON.stringify({
           meetingId: meetId,
           token: localStorage.getItem("token"),
-          // audio: allow.audio,
-          // video: allow.video,
         }),
       })
     );
   }
 
-  // if (!isAuthenticated) {
-  //   router.replace("/");
-  //   return null;
-  // }
+  function disconnect() {
+    stream.current?.getTracks().forEach((t) => {
+      t.stop();
+    });
+    pc.current?.close();
+    socket?.send(
+      JSON.stringify({
+        event: "leave",
+        data: "",
+      })
+    );
 
-  return joinedMeeting ? (
-    <div>
-      <div
-        className="flex flex-wrap gap-4 justify-center items-center"
-        id="remoteVideos"
-      ></div>
-      <div>
-        {Object.keys(users).map((userId) => {
-          const user = users[userId];
-          return (
-            <div key={userId}>
-              <h2>{user.name}</h2>
-            </div>
-          );
-        })}
-        {Object.values(userRequests).map((user) => {
-          return (
-            <div key={user.userId}>
-              <h2>{user.name}</h2>
-              <button
-                onClick={() => {
-                  socket?.send(
-                    JSON.stringify({
-                      event: "accept-join-request",
-                      data: JSON.stringify({
-                        meetingId: meetId,
-                        ...user,
-                        ...allow,
-                      }),
-                    })
-                  );
-                  setUserRequests((prev) => {
-                    delete prev[user.userId];
-                    return { ...prev };
-                  });
-                }}
-              >
-                Accept
-              </button>
-            </div>
-          );
-        })}
-      </div>
-      <div className="fixed  bottom-0 left-0 right-0 bg-transparent py-3 flex justify-center items-center gap-2  z-10">
-        <Button
-          onClick={() => {
-            setAllow((prev) => ({ ...prev, audio: !prev.audio }));
-          }}
-          size="icon"
-          variant="ghost"
-        >
-          {allow.audio ? <Mic /> : <MicOff />}
-        </Button>
-        <Button
-          onClick={() => {
-            setAllow((prev) => ({ ...prev, video: !prev.video }));
-          }}
-          size="icon"
-          variant="ghost"
-        >
-          {allow.video ? <Video /> : <VideoOff />}
-        </Button>
-        <Button
-          onClick={() => {
-            setAllow((prev) => ({ ...prev, shareScreen: !prev.shareScreen }));
-          }}
-          size="icon"
-          variant="ghost"
-        >
-          {allow.shareScreen ? <MonitorX /> : <MonitorUp />}
-        </Button>
-      </div>
-    </div>
-  ) : (
+    window.location.reload();
+  }
+
+  const toggleMessages = () => setShowMessages((prev) => !prev);
+
+  const sendMessage = (message: string) => {
+    socket?.send(
+      JSON.stringify({
+        event: "text-message",
+        data: message,
+      })
+    );
+  };
+
+  return (
     <>
-      <nav className="flex w-[90%] m-auto justify-between items-center  py-3">
-        <h1 className="md:text-2xl font-bold">
-          <span className="text-purple-500">Google</span>&nbsp;Meet
-        </h1>
-        <Navbar />
-      </nav>
-      <div className="m-3 h-[80%]  md:flex gap-3 items-center">
-        <div className="relative  flex-1 mb-4 md:mb-0 flex justify-center items-center">
-          {!allow.video && (
-            <div className="w-[90%] aspect-video flex justify-center flex-col items-center object-cover  bg-[#383838] text-white rounded-lg">
-              <User />
-              <h1>{user?.name}(You)</h1>
-            </div>
-          )}
-          {allow.video && (
-            <video
-              className="w-[90%] aspect-video object-cover  bg-background rounded-lg"
-              ref={localVideoRef}
-              width="160"
-              height="120"
-              autoPlay
-              muted
-            ></video>
-          )}
-          <div className="absolute flex text-white items-center justify-center gap-2 bottom-2 z-10">
-            <Button
-              onClick={() => {
-                setAllow((prev) => ({ ...prev, audio: !prev.audio }));
-              }}
-              size="icon"
-              variant="ghost"
-            >
-              {allow.audio ? <Mic /> : <MicOff />}
-            </Button>
-            <Button
-              onClick={() => {
-                setAllow((prev) => ({ ...prev, video: !prev.video }));
-              }}
-              size="icon"
-              variant="ghost"
-            >
-              {allow.video ? <Video /> : <VideoOff />}
-            </Button>
+      {joinedMeeting && (
+        <>
+          <div className="h-[92%] flex">
+            <MediaPanel
+              allow={allow}
+              mediaStreams={mediaStreams}
+              setAllow={setAllow}
+              setMediaStreams={setMediaStreams}
+              tracksMap={tracksMap}
+              users={users}
+              audioAllowed={audioAllowed}
+              screenShareAllowed={screenShareAllowed}
+              videoAllowed={videoAllowed}
+              host={hostId === user?.id}
+            />
+            {showMessages && (
+              <>
+                <div className="hidden mt-4 mr-4 rounded-md sm:block w-[350px] border-[2px] border-secondary">
+                  <MessageBox messages={messages} sendMessage={sendMessage} />
+                </div>
+                <div className="fixed top-0 bottom-0 left-0 right-0 z-20 sm:hidden bg-secondary ">
+                  <MessageBox messages={messages} sendMessage={sendMessage} />
+                </div>
+              </>
+            )}
           </div>
-        </div>
-        <div className="flex-1 flex flex-col gap-3 justify-center items-center">
-          <h1 className="text-2xl">Ready to Join ?</h1>
-          <Button disabled={joining} onClick={joinHandler}>
-            {joining
-              ? "Joining.."
-              : hostId === user?.id
-              ? "Join"
-              : "Request to join"}
-          </Button>
-        </div>
-      </div>
+          <Footer
+            showMessages={showMessages}
+            allow={allow}
+            disconnect={disconnect}
+            setAllow={setAllow}
+            toggleMessages={toggleMessages}
+            audioAllowed={audioAllowed}
+            screenShareAllowed={screenShareAllowed}
+            videoAllowed={videoAllowed}
+            host={hostId === user?.id}
+          />
+        </>
+      )}
+      {!joinedMeeting && (
+        <JoinScreen
+          allow={allow}
+          hostId={hostId}
+          joinHandler={joinHandler}
+          joining={joining}
+          setAllow={setAllow}
+          ref={localVideoRef}
+          audioAllowed={audioAllowed}
+          screenShareAllowed={screenShareAllowed}
+          videoAllowed={videoAllowed}
+          meetId={meetId}
+        />
+      )}
     </>
   );
 }
@@ -519,12 +451,7 @@ type Props = {
   meetId: string;
   hostId: string;
   wss: string;
+  videoAllowed: boolean;
+  audioAllowed: boolean;
+  screenShareAllowed: boolean;
 };
-
-// class CustomRTCPeerConnection extends RTCPeerConnection {
-//   id: string;
-//   constructor(id: string, configuration?: RTCConfiguration) {
-//     super(configuration);
-//     this.id = id;
-//   }
-// }

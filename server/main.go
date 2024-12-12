@@ -16,10 +16,15 @@ import (
 )
 
 func main() {
+	InitializeServer(":8081")
+}
+
+func InitializeServer(port string) {
 	if err := godotenv.Load(".env"); err != nil {
 		log.Fatal("Error loading env file")
 	}
 
+	lib.GetInstanceLocation(port)
 	ctx := context.Background()
 	lib.ConnectDb(ctx)
 
@@ -31,19 +36,25 @@ func main() {
 	r.Methods("POST").Path("/api/v1/auth/check").HandlerFunc(auth.CheckEmail)
 	r.Methods("GET").Path("/api/v1/auth/me").HandlerFunc(auth.VerifyToken)
 	r.Methods("POST").Path("/api/v1/meet").HandlerFunc(meet.CreateMeet)
+	r.Methods("PUT").Path("/api/v1/meet/{meetId}").HandlerFunc(meet.UpdateMeetDetails)
 	r.Methods("GET").Path("/api/v1/meet/{meetId}").HandlerFunc(meet.GetMeetDetails)
-	r.Methods("GET").Path("/api/v1/connections").HandlerFunc(ws.GetConnections)
+	r.Methods("GET").Path("/api/v1/connections").HandlerFunc(ws.GetConnections(port))
 
+	r.Methods("GET").Path("/").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		lib.WriteJson(w, http.StatusOK, map[string]string{
+			"message": "Server is up and running successfully",
+		})
+	})
 	corsHandler := handlers.CORS(
 		handlers.AllowedOrigins([]string{"http://localhost:3000"}),
-		handlers.AllowedMethods([]string{"GET", "POST", "OPTIONS"}),
+		handlers.AllowedMethods([]string{"GET", "POST", "PUT", "OPTIONS"}),
 		handlers.AllowedHeaders([]string{"Origin", "Content-Type", "Authorization"}),
 	)(r)
 
 	loggingHandler := handlers.LoggingHandler(os.Stdout, corsHandler)
 
 	server := &http.Server{
-		Addr:    ":8080",
+		Addr:    port,
 		Handler: loggingHandler,
 	}
 

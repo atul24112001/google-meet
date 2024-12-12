@@ -1,7 +1,7 @@
 import ClientHomePage from "@/client-pages/home";
-import { Button } from "@/components/ui/button";
 import Navbar from "@/layout/navbar";
 import Image from "next/image";
+
 export default function Home() {
   return (
     <>

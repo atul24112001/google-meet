@@ -4,7 +4,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -12,7 +11,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { User } from "@/types";
+import { User } from "@prisma/client";
 import axios, { AxiosError, AxiosInstance } from "axios";
 import { setCookie } from "cookies-next";
 import {
@@ -42,7 +41,7 @@ const AuthContext = createContext<AuthContextTypes>({
   isAuthenticated: false,
   user: null,
   apiClient: axios,
-  authenticate: async (email: string, password?: string, name?: string) => {},
+  authenticate: async () => {},
   toggleShowAuthDialog: () => {},
 });
 
@@ -51,7 +50,7 @@ export const AuthContextProvider = ({ children }: PropsWithChildren) => {
   const [user, setUser] = useState<null | User>(null);
   const [token, setToken] = useState("");
   const [userExist, setUserExist] = useState<null | boolean>(null);
-  const [authenticating, setAuthenticating] = useState(false);
+  const [, setAuthenticating] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showAuthDialog, setShowAuthDialog] = useState(false);
   const [details, setDetails] = useState({ name: "", email: "", password: "" });
@@ -101,7 +100,7 @@ export const AuthContextProvider = ({ children }: PropsWithChildren) => {
     setUserExist(success);
   };
 
-  const authenticateHandler = (data: any) => {
+  const authenticateHandler = (data: { data: User; token: string }) => {
     setIsAuthenticated(true);
     setUser(data.data);
     setToken(data.token);

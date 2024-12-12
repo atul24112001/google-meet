@@ -15,7 +15,7 @@ type AcceptAnswerPayload struct {
 }
 
 func AcceptAnswer(userId string, message string) {
-	user, exist := users[userId]
+	user, exist := SafeReadFromUsers(userId)
 	if !exist {
 		return
 	}
@@ -52,7 +52,4 @@ func AcceptAnswer(userId string, message string) {
 			"message": "Something went wrong while setting remote description",
 		})
 	}
-
-	meeting.PeerConnections[userId].Audio = acceptAnswerPayload.Audio
-	meeting.PeerConnections[userId].Video = acceptAnswerPayload.Video
 }

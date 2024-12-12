@@ -18,7 +18,7 @@ func ChangeTrack(userId string, payload string) (string, error) {
 		return changeTrackType.MeetingId, err
 	}
 
-	connections[changeTrackType.MeetingId].PeerConnections[userId].Audio = changeTrackType.Audio
-	connections[changeTrackType.MeetingId].PeerConnections[userId].Video = changeTrackType.Video
+	// connections[changeTrackType.MeetingId].PeerConnections[userId].Audio = changeTrackType.Audio
+	// connections[changeTrackType.MeetingId].PeerConnections[userId].Video = changeTrackType.Video
 	return changeTrackType.MeetingId, nil
 }

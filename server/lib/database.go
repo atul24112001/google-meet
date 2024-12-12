@@ -19,13 +19,15 @@ func ConnectDb(ctx context.Context) {
 		log.Fatal("Error connecting database")
 	}
 
-	// options := &redis.Options{
-	// 	Addr:     os.Getenv("REDIS_ADDRESS"),
-	// 	Password: os.Getenv("REDIS_PASSWORD"),
-	// 	DB:       0,
-	// }
+	options := &redis.Options{
+		Addr:     os.Getenv("REDIS_ADDRESS"),
+		Password: os.Getenv("REDIS_PASSWORD"),
+		DB:       0,
+	}
 
-	options, err := redis.ParseURL(os.Getenv("REDIS_URL"))
+	// _options, err := redis.ParseURL(os.Getenv("REDIS_URL"))
+	// log.Println(_options)
+	// log.Println(options)
 	if err != nil {
 		log.Fatal("Error parsing to redis url")
 	}

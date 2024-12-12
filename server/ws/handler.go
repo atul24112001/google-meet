@@ -3,7 +3,6 @@ package ws
 import (
 	"encoding/json"
 	"errors"
-	"log"
 	"net/http"
 	"sync"
 
@@ -13,7 +12,6 @@ import (
 
 var logger = logging.NewDefaultLoggerFactory().NewLogger("sfu-ws")
 
-var users = map[string]*threadSafeWriter{}
 var wsUserMap = map[*websocket.Conn]string{}
 
 var upgrader = websocket.Upgrader{
@@ -27,31 +25,26 @@ func WebsocketHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	c := &threadSafeWriter{unsafeConn, sync.Mutex{}}
+	c := &threadSafeWriter{unsafeConn, "", sync.Mutex{}}
 	defer c.Close()
 
 	message := &WebsocketMessage{}
 
-	keys := make([]string, 0, len(connections))
-	for k := range connections {
-		keys = append(keys, k)
-	}
-	log.Println("keys: ", keys)
+	// keys := make([]string, 0, len(connections))
+	// for k := range connections {
+	// keys = append(keys, k)
+	// }
 
 	for {
 		_, raw, err := c.ReadMessage()
 		if err != nil {
 			logger.Errorf("Failed to read message: %v", err)
-			userId := wsUserMap[c.Conn]
-			delete(users, userId)
-			Disconnect(userId)
+			Disconnect(c.Conn)
 			return
 		}
 
 		logger.Infof("Got message: %s", raw)
-
 		if err := json.Unmarshal(raw, &message); err != nil {
-
 			logger.Errorf("Failed to unmarshal json to message: %v", err)
 			return
 		}
@@ -59,6 +52,11 @@ func WebsocketHandler(w http.ResponseWriter, r *http.Request) {
 		switch message.Event {
 		case "join-meeting":
 			JoinMeeting(r.Context(), c, *message)
+		case "text-message":
+			userId, exist := wsUserMap[c.Conn]
+			if exist {
+				TextMessageHandler(r.Context(), userId, message.Data)
+			}
 		case "accept-join-request":
 			userId, exist := wsUserMap[c.Conn]
 			if exist {
@@ -75,26 +73,29 @@ func WebsocketHandler(w http.ResponseWriter, r *http.Request) {
 				AcceptAnswer(userId, message.Data)
 			}
 		case "leave":
-			userId := wsUserMap[c.Conn]
-			delete(users, userId)
-			Disconnect(userId)
+			Disconnect(c.Conn)
 		case "change-track":
 			userId := wsUserMap[c.Conn]
 			meetingId, err := ChangeTrack(userId, message.Data)
 			if err == nil {
 				JoinMeetingRequestHandler(r.Context(), meetingId, userId)
 			}
-		case "new-track":
-			// userId, exist := wsUserMap[c.Conn]
-			// if exist {
-			// 	NewTrackHandler(r.Context(), userId, message.Data)
-			// }
+		case "renegotiate":
+			userId, exist := wsUserMap[c.Conn]
+			if exist {
+				Renegotiate(r.Context(), userId, message.Data)
+			}
+		case "offer":
+			userId, exist := wsUserMap[c.Conn]
+			if exist {
+				HandleOffer(r.Context(), userId, message.Data)
+			}
 		}
 	}
 }
 
 func SendMessage(userId string, data interface{}) error {
-	user, exist := users[userId]
+	user, exist := SafeReadFromUsers(userId)
 	if exist {
 		return user.WriteJSON(data)
 	}
@@ -103,6 +104,7 @@ func SendMessage(userId string, data interface{}) error {
 
 type threadSafeWriter struct {
 	*websocket.Conn
+	MeetingId string
 	sync.Mutex
 }
 

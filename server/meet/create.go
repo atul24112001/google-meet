@@ -4,7 +4,6 @@ import (
 	"google-meet/lib"
 	"google-meet/middleware"
 	"google-meet/model"
-	"log"
 	"net/http"
 	"time"
 
@@ -28,8 +27,7 @@ func CreateMeet(w http.ResponseWriter, r *http.Request) {
 	t := time.Now()
 	formattedTime := t.Format("2006-01-02 15:04:05.000")
 
-	if err = lib.Pool.QueryRow(r.Context(), `INSERT INTO public.meets (id, "startsAt", "userId") VALUES ($1, $2, $3) RETURNING id`, meetId.String(), formattedTime, user.Id).Scan(&meet.Id); err != nil {
-		log.Println(user.Id)
+	if err = lib.Pool.QueryRow(r.Context(), `INSERT INTO public.meets (id, "startsAt", "userId", type) VALUES ($1, $2, $3, $4) RETURNING id`, meetId.String(), formattedTime, user.Id, "meeting").Scan(&meet.Id); err != nil {
 		lib.ErrorJson(w, http.StatusInternalServerError, err.Error())
 		return
 	}

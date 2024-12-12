@@ -9,8 +9,12 @@ type User struct {
 }
 
 type Meet struct {
-	Id        string `json:"id"`
-	StartsAt  string `json:"startsAt"`
-	CreatedAt string `json:"createdAt"`
-	UserId    string `json:"userId"`
+	Id          string `json:"id"`
+	StartsAt    string `json:"startsAt"`
+	CreatedAt   string `json:"createdAt"`
+	UserId      string `json:"userId"`
+	Type        string `json:"type"`
+	AllowAudio  bool   `json:"allowAudio"`
+	AllowVideo  bool   `json:"allowVideo"`
+	AllowScreen bool   `json:"allowScreen"`
 }

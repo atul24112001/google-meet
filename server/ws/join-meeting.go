@@ -38,13 +38,13 @@ func JoinMeeting(ctx context.Context, conn *threadSafeWriter, message WebsocketM
 		return
 	}
 
-	users[claims.Id] = conn
+	SafeWriteToUsers(claims.Id, conn)
 	wsUserMap[conn.Conn] = claims.Id
 
 	meet, err := query.GetMeetingById(ctx, joinMeetingPayload.MeetingId)
 	if err != nil {
 		logger.Errorf("Something went wrong while fetching meeting details: %v", err)
-		users[claims.Id].WriteJSON(map[string]interface{}{
+		conn.WriteJSON(map[string]interface{}{
 			"event":   "error",
 			"message": "Something went wrong while fetching meeting details",
 		})
@@ -57,8 +57,12 @@ func JoinMeeting(ctx context.Context, conn *threadSafeWriter, message WebsocketM
 		_, alreadyExist = connections[meet.Id].PeerConnections[claims.Id]
 	}
 
+	if meet.UserId == claims.Id && !alreadyExist {
+		lib.RedisClient.Set(ctx, fmt.Sprintf("google-meet:host:%s", meet.Id), lib.Host, time.Hour*24)
+	}
+
 	if meet.UserId != claims.Id && !alreadyExist {
-		host, hostExist := users[meet.UserId]
+		host, hostExist := SafeReadFromUsers(meet.UserId)
 		if !hostExist {
 			conn.WriteJSON(map[string]interface{}{
 				"event":   "error",
@@ -102,7 +106,8 @@ func JoinMeeting(ctx context.Context, conn *threadSafeWriter, message WebsocketM
 }
 
 func JoinMeetingRequestHandler(ctx context.Context, meetingId string, userId string) {
-	user, exist := users[userId]
+	log.Println("Joining meeting: ", meetingId, userId)
+	user, exist := SafeReadFromUsers(userId)
 	if !exist {
 		return
 	}
@@ -135,6 +140,7 @@ func JoinMeetingRequestHandler(ctx context.Context, meetingId string, userId str
 			TrackLocals:     map[string]*webrtc.TrackLocalStaticRTP{},
 			PeerConnections: map[string]*PeerConnectionState{},
 			TrackLocalsMap:  sync.Map{},
+			OfferQueue:      OfferQueue{},
 		}
 	}
 
@@ -147,8 +153,20 @@ func JoinMeetingRequestHandler(ctx context.Context, meetingId string, userId str
 		return
 	}
 
+	keys := []string{}
+	meeting.TrackLocalsMap.Range(func(key, value any) bool {
+		if value == userId {
+			keys = append(keys, key.(string))
+		}
+		return true
+	})
+
+	for _, v := range keys {
+		meeting.TrackLocalsMap.Delete(v)
+	}
+
 	meeting.ListLock.Lock()
-	meeting.PeerConnections[userId] = &PeerConnectionState{peerConnection, user, true, true}
+	meeting.PeerConnections[userId] = &PeerConnectionState{peerConnection, user}
 	// log.Println("userId-PeerConnections", userId, )
 	meeting.ListLock.Unlock()
 
@@ -190,7 +208,7 @@ func JoinMeetingRequestHandler(ctx context.Context, meetingId string, userId str
 	})
 
 	peerConnection.OnTrack(func(tr *webrtc.TrackRemote, r *webrtc.RTPReceiver) {
-		log.Println("track id reciver", r.Track().ID())
+		log.Println("Track received on server", r.Track().ID())
 		TrackHandler(tr, meetingId, userId)
 	})
 
@@ -198,11 +216,12 @@ func JoinMeetingRequestHandler(ctx context.Context, meetingId string, userId str
 		logger.Infof("ICE connection state changed: %s meedId=%s", is, meetingId)
 	})
 
+	SafeUpdateMeetingToUsers(userId, meetingId)
 	SendMessage(userId, map[string]interface{}{
 		"event": "joining-meeting",
 		"data": map[string]interface{}{
 			"meetingId": meetingId,
-			// "users":     users,
+			"pid":       os.Getpid(),
 		},
 	})
 
@@ -221,10 +240,8 @@ func signalPeerConnections(meetingId string, userId string) {
 	}()
 
 	attemptSync := func() (tryAgain bool) {
-		for participantId, pc := range meeting.PeerConnections {
+		for participantId := range meeting.PeerConnections {
 			if meeting.PeerConnections[participantId].PeerConnection.ConnectionState() == webrtc.PeerConnectionStateClosed {
-				// log.Println("deleting participant")
-				// delete(meeting.PeerConnections, participantId)
 				return true
 			}
 
@@ -252,63 +269,16 @@ func signalPeerConnections(meetingId string, userId string) {
 			}
 
 			// Add all track we aren't sending yet to the PeerConnection
-			for trackID, track := range meeting.TrackLocals {
+			for trackID, _ := range meeting.TrackLocals {
 				if _, ok := existingSenders[trackID]; !ok {
-					log.Println("Kind: ", track.Kind(), userId, pc.Audio, pc.Video)
-					if (track.Kind() == webrtc.RTPCodecTypeAudio && pc.Audio) || (track.Kind() == webrtc.RTPCodecTypeVideo && pc.Video) {
-						if _, err := meeting.PeerConnections[participantId].PeerConnection.AddTrack(meeting.TrackLocals[trackID]); err != nil {
-							return true
-						}
+					if _, err := meeting.PeerConnections[participantId].PeerConnection.AddTrack(meeting.TrackLocals[trackID]); err != nil {
+						return true
 					}
 				}
 			}
 
-			offer, err := meeting.PeerConnections[participantId].PeerConnection.CreateOffer(nil)
+			err := Offer(meetingId, participantId)
 			if err != nil {
-				return true
-			}
-
-			if err = meeting.PeerConnections[participantId].PeerConnection.SetLocalDescription(offer); err != nil {
-				return true
-			}
-
-			offerString, err := json.Marshal(map[string]interface{}{
-				"offer":  offer,
-				"userId": userId,
-			})
-			if err != nil {
-				logger.Errorf("Failed to marshal offer to json: %v", err)
-				return true
-			}
-
-			logger.Infof("Send offer to client: %v", offer)
-			_users := make([]interface{}, 0, len(meeting.PeerConnections)-1)
-			_tracks := map[string]string{}
-
-			for k := range meeting.PeerConnections {
-				participant, err := query.GetUserById(context.Background(), k)
-				if err == nil {
-					_users = append(_users, map[string]string{
-						"name":   participant.Name,
-						"userId": participant.Id,
-						"email":  participant.Email,
-					})
-				}
-			}
-
-			meeting.TrackLocalsMap.Range(func(key, value any) bool {
-				_tracks[key.(string)] = value.(string)
-				return true
-			})
-
-			if err = meeting.PeerConnections[participantId].Websocket.WriteJSON(map[string]interface{}{
-				"event": "offer",
-				"data": map[string]interface{}{
-					"offer":  string(offerString),
-					"users":  _users,
-					"tracks": _tracks,
-				},
-			}); err != nil {
 				return true
 			}
 		}

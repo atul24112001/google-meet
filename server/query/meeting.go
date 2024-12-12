@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"google-meet/lib"
 	"google-meet/model"
+	"log"
 	"time"
 )
 
@@ -21,12 +22,15 @@ func GetMeetingById(_ctx context.Context, meetId string) (model.Meet, error) {
 			return meet, err
 		}
 	}
-	if err := lib.Pool.QueryRow(context.Background(), `SELECT id, "userId" FROM public.meets WHERE id = $1`, meetId).Scan(&meet.Id, &meet.UserId); err != nil {
+	row := lib.Pool.QueryRow(context.Background(), `SELECT id, "userId", type, "allowAudio", "allowVideo", "allowScreen" FROM public.meets WHERE id = $1`, meetId)
+	if err := row.Scan(&meet.Id, &meet.UserId, &meet.Type, &meet.AllowAudio, &meet.AllowVideo, &meet.AllowScreen); err != nil {
+		log.Printf("Error querying meets: %v\n", err)
 		return meet, err
 	}
+
 	meetBytes, err := json.Marshal(meet)
 	if err == nil {
 		lib.RedisClient.Set(context.Background(), redisMeetingKey, string(meetBytes), time.Hour*24)
 	}
-	return meet, nil
+	return meet, err
 }

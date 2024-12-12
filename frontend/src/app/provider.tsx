@@ -1,25 +1,12 @@
 "use client";
 
-import React, { PropsWithChildren, useEffect, useState } from "react";
-import {
-  ThemeProvider as NextThemesProvider,
-  ThemeProviderProps,
-} from "next-themes";
+import React, { PropsWithChildren } from "react";
 import { AuthContextProvider } from "@/context/AuthContext";
 
-export default function Provider({ children }: PropsWithChildren<Props>) {
+export default function Provider({ children }: PropsWithChildren) {
   return (
-    <NextThemesProvider
-      attribute="class"
-      defaultTheme="system"
-      enableSystem
-      disableTransitionOnChange
-    >
-      <AuthContextProvider>
-        <div className="h-screen ">{children}</div>
-      </AuthContextProvider>
-    </NextThemesProvider>
+    <AuthContextProvider>
+      <div className="h-screen">{children}</div>
+    </AuthContextProvider>
   );
 }
-
-interface Props {}
