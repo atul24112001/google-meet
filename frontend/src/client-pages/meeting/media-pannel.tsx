@@ -26,7 +26,6 @@ export default function MediaPanel({
     return Object.values(tracksMap || {});
   }, [tracksMap]);
 
-  console.log({ mediaStreams, users, tracksMap, streamingUsers });
   return (
     <div
       className="flex flex-1 p-5 h-screen gap-4 justify-center items-center flex-wrap"
@@ -43,7 +42,7 @@ export default function MediaPanel({
           return null;
         }
 
-        if (!tracksMap[streamId]) {
+        if (!tracksMap?.[streamId]) {
           return null;
         }
 

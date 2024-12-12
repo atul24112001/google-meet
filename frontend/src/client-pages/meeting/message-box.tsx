@@ -2,9 +2,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/context/AuthContext";
 import { SendHorizonal } from "lucide-react";
-import React, { FormEvent, useRef } from "react";
+import React, { FormEvent, useEffect, useRef } from "react";
 
 export default function MessageBox({ sendMessage, messages }: Props) {
+  const messageContainer = useRef<HTMLDivElement>(null);
   const messageInputRef = useRef<HTMLInputElement>(null);
   const { user } = useAuth();
 
@@ -18,10 +19,21 @@ export default function MessageBox({ sendMessage, messages }: Props) {
       messageInputRef.current.value = "";
     }
   };
+
+  useEffect(() => {
+    if (messageContainer.current) {
+      messageContainer.current.scrollTop =
+        messageContainer.current.scrollHeight;
+    }
+    // messageContainer.current?.scroll({
+    //   top: messageContainer.current?.scrollHeight || 0,
+    //   behavior: "smooth",
+    // });
+  }, [messages.length]);
   return (
     <div className="h-full p-4 flex gap-4 flex-col">
-      <h2 className="font-semibold text-xl">Chat</h2>
-      <div className="flex-1 mt-1 overflow-y-auto">
+      <h2 className="font-semibold text-xl">Chat ({messages.length})</h2>
+      <div ref={messageContainer} className="flex-1 mt-1 overflow-y-auto">
         <div>
           {messages.length === 0 && (
             <p className="text-center opacity-50 text-sm">No data</p>
