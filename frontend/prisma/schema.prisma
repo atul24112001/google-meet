@@ -21,12 +21,21 @@ model User {
 }
 
 model Meet {
-  id        String   @id @default(uuid())
-  user      User     @relation(fields: [userId], references: [id])
-  userId    String
-  startsAt  DateTime
-  createdAt DateTime @default(now())
-  updatedAt DateTime @default(now()) @updatedAt
+  id          String   @id @default(uuid())
+  user        User     @relation(fields: [userId], references: [id])
+  userId      String
+  startsAt    DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
+  type        MeetType @default(meeting)
+  allowAudio  Boolean  @default(true)
+  allowVideo  Boolean  @default(true)
+  allowScreen Boolean  @default(true)
 
   @@map("meets")
+}
+
+enum MeetType {
+  class
+  meeting
 }

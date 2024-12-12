@@ -22,7 +22,10 @@ export default async function Meeting({ params }: ServerProps) {
       <ClientMeeting
         hostId={data.data.hostId}
         meetId={data.data.meetId}
-        // wss={data.data.wss}
+        wss={data.data.wss}
+        audioAllowed={data.data.allowAudio}
+        screenShareAllowed={data.data.allowScreen}
+        videoAllowed={data.data.allowVideo}
       />
     );
   } catch (error) {

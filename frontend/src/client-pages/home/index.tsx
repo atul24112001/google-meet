@@ -50,19 +50,33 @@ export default function ClientHomePage() {
         <Button onClick={toggleShowAuthDialog}>Signup/Signin</Button>
       )}
       {isAuthenticated && (
-        <form onSubmit={joinMeetingHandler} className="flex items-center gap-2">
-          <Button type="button" onClick={startInstantMeeting}>
+        <form
+          onSubmit={joinMeetingHandler}
+          className="lg:flex items-center gap-2"
+        >
+          <Button
+            type="button"
+            className=" w-full lg:w-fit mb-2 lg:mb-0"
+            onClick={startInstantMeeting}
+          >
             <Video />
             New meeting
           </Button>
-          <Input
-            onChange={(e) => setMeetingLink(e.target.value)}
-            placeholder="Enter code or link"
-            inputMode="url"
-          />
-          <Button type="submit" disabled={!meetingLink.trim()} variant="ghost">
-            Join
-          </Button>
+          <div className="flex flex-1 gap-2 items-center">
+            <Input
+              className="w-full"
+              onChange={(e) => setMeetingLink(e.target.value)}
+              placeholder="Enter code or link"
+              inputMode="url"
+            />
+            <Button
+              type="submit"
+              disabled={!meetingLink.trim()}
+              variant="ghost"
+            >
+              Join
+            </Button>
+          </div>
         </form>
       )}
     </div>

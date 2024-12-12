@@ -18,14 +18,12 @@ func GetMeetingById(_ctx context.Context, meetId string) (model.Meet, error) {
 	if cmd.Err() == nil {
 		if meetString, err := cmd.Result(); err != nil {
 			err := json.Unmarshal([]byte(meetString), &meet)
-			log.Println("22", err.Error())
 			lib.RedisClient.Del(context.Background(), redisMeetingKey)
 			return meet, err
 		}
 	}
-	log.Println("26", cmd.Err())
-	row := lib.Pool.QueryRow(context.Background(), `SELECT id, "userId" FROM public.meets WHERE id = $1`, meetId)
-	if err := row.Scan(&meet.Id, &meet.UserId); err != nil {
+	row := lib.Pool.QueryRow(context.Background(), `SELECT id, "userId", type, "allowAudio", "allowVideo", "allowScreen" FROM public.meets WHERE id = $1`, meetId)
+	if err := row.Scan(&meet.Id, &meet.UserId, &meet.Type, &meet.AllowAudio, &meet.AllowVideo, &meet.AllowScreen); err != nil {
 		log.Printf("Error querying meets: %v\n", err)
 		return meet, err
 	}
@@ -33,9 +31,6 @@ func GetMeetingById(_ctx context.Context, meetId string) (model.Meet, error) {
 	meetBytes, err := json.Marshal(meet)
 	if err == nil {
 		lib.RedisClient.Set(context.Background(), redisMeetingKey, string(meetBytes), time.Hour*24)
-
-	} else {
-		log.Println("33", err.Error())
 	}
-	return meet, nil
+	return meet, err
 }

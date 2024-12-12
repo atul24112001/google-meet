@@ -57,6 +57,10 @@ func JoinMeeting(ctx context.Context, conn *threadSafeWriter, message WebsocketM
 		_, alreadyExist = connections[meet.Id].PeerConnections[claims.Id]
 	}
 
+	if meet.UserId == claims.Id && !alreadyExist {
+		lib.RedisClient.Set(ctx, fmt.Sprintf("google-meet:host:%s", meet.Id), lib.Host, time.Hour*24)
+	}
+
 	if meet.UserId != claims.Id && !alreadyExist {
 		host, hostExist := SafeReadFromUsers(meet.UserId)
 		if !hostExist {
@@ -217,6 +221,7 @@ func JoinMeetingRequestHandler(ctx context.Context, meetingId string, userId str
 		"event": "joining-meeting",
 		"data": map[string]interface{}{
 			"meetingId": meetingId,
+			"pid":       os.Getpid(),
 		},
 	})
 

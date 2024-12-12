@@ -13,18 +13,23 @@ export default function MediaPanel({
   setMediaStreams,
   allow,
   setAllow,
+  videoAllowed,
+  audioAllowed,
+  screenShareAllowed,
+  host,
 }: Props) {
   const [fullScreen, setFullScreen] = useState("");
 
   const { user } = useAuth();
 
   const streamingUsers = useMemo(() => {
-    return Object.values(tracksMap);
+    return Object.values(tracksMap || {});
   }, [tracksMap]);
 
+  console.log({ mediaStreams, users, tracksMap, streamingUsers });
   return (
     <div
-      className="flex flex-1 p-5 h-screen gap-4 justify-center items-center"
+      className="flex flex-1 p-5 h-screen gap-4 justify-center items-center flex-wrap"
       id="remoteVideos"
     >
       {Object.keys(mediaStreams).map((streamId) => {
@@ -90,7 +95,14 @@ export default function MediaPanel({
                   <p className="text-sm">{users[tracksMap[streamId]].name}</p>
                   {fullScreen === streamId && (
                     <div className="flex items-center gap-1">
-                      <MediaController allow={allow} setAllow={setAllow} />
+                      <MediaController
+                        allow={allow}
+                        setAllow={setAllow}
+                        audioAllowed={audioAllowed}
+                        screenShareAllowed={screenShareAllowed}
+                        videoAllowed={videoAllowed}
+                        host={host}
+                      />
                     </div>
                   )}
                   <Button
@@ -163,4 +175,8 @@ type Props = {
   allow: Allow;
   setMediaStreams: Dispatch<SetStateAction<MediaStreamMap>>;
   setAllow: Dispatch<SetStateAction<Allow>>;
+  videoAllowed: boolean;
+  audioAllowed: boolean;
+  screenShareAllowed: boolean;
+  host: boolean;
 };

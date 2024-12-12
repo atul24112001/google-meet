@@ -9,10 +9,21 @@ export default function Footer({
   allow,
   setAllow,
   showMessages,
+  videoAllowed,
+  audioAllowed,
+  screenShareAllowed,
+  host,
 }: Props) {
   return (
     <div className="py-3 flex justify-center items-center gap-2 border-t-[2px] border-secondary  z-10">
-      <MediaController allow={allow} setAllow={setAllow} />
+      <MediaController
+        allow={allow}
+        setAllow={setAllow}
+        audioAllowed={audioAllowed}
+        screenShareAllowed={screenShareAllowed}
+        videoAllowed={videoAllowed}
+        host={host}
+      />
       <Button onClick={toggleMessages} size="icon" variant="ghost">
         {showMessages ? <MessageSquareOff /> : <MessageSquare />}
       </Button>
@@ -29,6 +40,10 @@ type Props = {
   allow: Allow;
   showMessages: boolean;
   setAllow: Dispatch<SetStateAction<Allow>>;
+  videoAllowed: boolean;
+  audioAllowed: boolean;
+  screenShareAllowed: boolean;
+  host: boolean;
 };
 
 type Allow = { audio: boolean; video: boolean; shareScreen: boolean };

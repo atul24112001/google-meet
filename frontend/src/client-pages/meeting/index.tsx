@@ -3,14 +3,21 @@
 import { ToastAction } from "@/components/ui/toast";
 import { useToast } from "@/hooks/use-toast";
 import "webrtc-adapter";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import Footer from "./footer";
 import JoinScreen from "./join-screen";
 import MediaPanel from "./media-pannel";
 import { useAuth } from "@/context/AuthContext";
 import MessageBox from "./message-box";
 
-export default function ClientMeeting({ hostId, meetId }: Props) {
+export default function ClientMeeting({
+  hostId,
+  meetId,
+  wss,
+  videoAllowed,
+  audioAllowed,
+  screenShareAllowed,
+}: Props) {
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const stream = useRef<MediaStream | null>(null);
   const pc = useRef<RTCPeerConnection | null>(null);
@@ -30,7 +37,7 @@ export default function ClientMeeting({ hostId, meetId }: Props) {
   const [showMessages, setShowMessages] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
 
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const { toast } = useToast();
 
   useEffect(() => {
@@ -51,15 +58,27 @@ export default function ClientMeeting({ hostId, meetId }: Props) {
     }
   }, [joinedMeeting]);
 
-  useEffect(() => {
-    (async () => {
-      pc.current = await initiateConnection();
+  useLayoutEffect(() => {
+    if (hostId === user?.id) {
+      setAllow({
+        audio: true,
+        shareScreen: false,
+        video: true,
+      });
+    }
+  }, [user?.id]);
 
-      return () => {
-        pc.current?.close();
-      };
-    })();
-  }, [allow.shareScreen, allow.video]);
+  useEffect(() => {
+    if (isAuthenticated) {
+      (async () => {
+        pc.current = await initiateConnection();
+
+        return () => {
+          pc.current?.close();
+        };
+      })();
+    }
+  }, [allow.shareScreen, allow.video, isAuthenticated]);
 
   useEffect(() => {
     if (stream.current) {
@@ -134,6 +153,7 @@ export default function ClientMeeting({ hostId, meetId }: Props) {
               return prev;
             }, {} as Users) || {}
           );
+
           setTracksMap(data.tracks);
           setJoinedMeeting(true);
           break;
@@ -233,10 +253,17 @@ export default function ClientMeeting({ hostId, meetId }: Props) {
       stream.current = null;
     }
     const _mainStream = new MediaStream();
-    const _stream = await navigator.mediaDevices.getUserMedia({
-      audio: true,
-      video: allow.video,
-    });
+
+    if (allow.audio || allow.video) {
+      const _stream = await navigator.mediaDevices.getUserMedia({
+        audio: allow.audio,
+        video: allow.shareScreen ? false : allow.video,
+      });
+
+      _stream.getTracks().forEach((track) => {
+        _mainStream.addTrack(track);
+      });
+    }
 
     if (allow.shareScreen) {
       const _screenStream = await navigator.mediaDevices.getDisplayMedia({
@@ -244,33 +271,14 @@ export default function ClientMeeting({ hostId, meetId }: Props) {
       });
       _screenStream.getTracks().forEach((track) => {
         _mainStream.addTrack(track);
-        // _screenStream.removeTrack(track);
       });
     }
 
-    _stream.getTracks().forEach((track) => {
-      _mainStream.addTrack(track);
-      // _stream.removeTrack(track);
-    });
-
     const _pc = new RTCPeerConnection({
-      // iceServers: [
-      //   {
-      //     urls: [
-      //       "stun:stun1.l.google.com:19302",
-      //       "stun:stun2.l.google.com:19302",
-      //       "stun:stun.l.google.com:19302",
-      //       "stun:stun3.l.google.com:19302",
-      //       "stun:stun4.l.google.com:19302",
-      //       "stun:stun.services.mozilla.com",
-      //     ],
-      //   },
-      // ],
       iceCandidatePoolSize: 10,
     });
 
     _pc.ontrack = function (event) {
-      console.log(`Getting ${event.track.kind} track: `, event.track.id);
       setMediaStreams((prev) => {
         prev[event.streams[0].id] = {
           ...(prev[event.streams[0].id] || {}),
@@ -284,10 +292,12 @@ export default function ClientMeeting({ hostId, meetId }: Props) {
       });
     };
 
-    const _audioTrack = _mainStream.getAudioTracks()[0];
-    _pc.addTrack(_audioTrack, _mainStream);
+    // const _audioTrack = _mainStream.getAudioTracks()[0];
+    // if (_audioTrack) {
+    //   _pc.addTrack(_audioTrack, _mainStream);
+    // }
 
-    _mainStream.getVideoTracks().map((track) => {
+    _mainStream.getTracks().map((track) => {
       _pc.addTrack(track, _mainStream);
     });
 
@@ -297,7 +307,7 @@ export default function ClientMeeting({ hostId, meetId }: Props) {
 
     stream.current = _mainStream;
 
-    const ws = new WebSocket(`${process.env.NEXT_PUBLIC_API_URL}/websocket`);
+    const ws = new WebSocket(`${wss}/websocket`);
 
     _pc.onicecandidate = (e) => {
       if (!e.candidate) {
@@ -312,7 +322,6 @@ export default function ClientMeeting({ hostId, meetId }: Props) {
           }),
         })
       );
-      // }
     };
 
     ws.onopen = () => {
@@ -391,6 +400,10 @@ export default function ClientMeeting({ hostId, meetId }: Props) {
               setMediaStreams={setMediaStreams}
               tracksMap={tracksMap}
               users={users}
+              audioAllowed={audioAllowed}
+              screenShareAllowed={screenShareAllowed}
+              videoAllowed={videoAllowed}
+              host={hostId === user?.id}
             />
             {showMessages && (
               <>
@@ -409,6 +422,10 @@ export default function ClientMeeting({ hostId, meetId }: Props) {
             disconnect={disconnect}
             setAllow={setAllow}
             toggleMessages={toggleMessages}
+            audioAllowed={audioAllowed}
+            screenShareAllowed={screenShareAllowed}
+            videoAllowed={videoAllowed}
+            host={hostId === user?.id}
           />
         </>
       )}
@@ -420,6 +437,10 @@ export default function ClientMeeting({ hostId, meetId }: Props) {
           joining={joining}
           setAllow={setAllow}
           ref={localVideoRef}
+          audioAllowed={audioAllowed}
+          screenShareAllowed={screenShareAllowed}
+          videoAllowed={videoAllowed}
+          meetId={meetId}
         />
       )}
     </>
@@ -429,5 +450,8 @@ export default function ClientMeeting({ hostId, meetId }: Props) {
 type Props = {
   meetId: string;
   hostId: string;
-  // wss: string;
+  wss: string;
+  videoAllowed: boolean;
+  audioAllowed: boolean;
+  screenShareAllowed: boolean;
 };
