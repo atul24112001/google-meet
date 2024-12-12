@@ -1,11 +1,8 @@
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
 import { useAuth } from "@/context/AuthContext";
-import { useToast } from "@/hooks/use-toast";
 import Navbar from "@/layout/navbar";
 import { Mic, MicOff, User, Video, VideoOff } from "lucide-react";
-import React, { Dispatch, forwardRef, SetStateAction, useState } from "react";
+import React, { Dispatch, forwardRef, SetStateAction } from "react";
 
 const JoinScreen = forwardRef<HTMLVideoElement, Props>(
   (
@@ -13,48 +10,48 @@ const JoinScreen = forwardRef<HTMLVideoElement, Props>(
       allow,
       setAllow,
       hostId,
-      meetId,
+      // meetId,
       joinHandler,
       joining,
       videoAllowed,
       audioAllowed,
-      screenShareAllowed,
+      // screenShareAllowed,
     },
     localVideoRef
   ) => {
-    const [permissions, setPermissions] = useState({
-      allowAudio: audioAllowed,
-      allowVideo: videoAllowed,
-      allowScreen: screenShareAllowed,
-    });
-    const [loading, setLoading] = useState(false);
+    // const [permissions, setPermissions] = useState({
+    //   allowAudio: audioAllowed,
+    //   allowVideo: videoAllowed,
+    //   allowScreen: screenShareAllowed,
+    // });
+    // const [loading, setLoading] = useState(false);
 
-    const { user, apiClient } = useAuth();
-    const { toast } = useToast();
+    const { user } = useAuth();
+    // const { toast } = useToast();
 
-    const changeHandler = async (
-      target: "allowAudio" | "allowVideo" | "allowScreen",
-      state: boolean
-    ) => {
-      setLoading(true);
-      const data = permissions;
-      data[target] = state;
-      try {
-        const {} = await apiClient.put("/meet/" + meetId, data);
-        setPermissions((prev) => {
-          return {
-            ...prev,
-            [target]: state,
-          };
-        });
-      } catch (error) {
-        toast({
-          title: "Something went wrong",
-          description: "Failed to update permissions",
-        });
-      }
-      setLoading(false);
-    };
+    // const changeHandler = async (
+    //   target: "allowAudio" | "allowVideo" | "allowScreen",
+    //   state: boolean
+    // ) => {
+    //   setLoading(true);
+    //   const data = permissions;
+    //   data[target] = state;
+    //   try {
+    //     const {} = await apiClient.put("/meet/" + meetId, data);
+    //     setPermissions((prev) => {
+    //       return {
+    //         ...prev,
+    //         [target]: state,
+    //       };
+    //     });
+    //   } catch (error) {
+    //     toast({
+    //       title: "Something went wrong",
+    //       description: "Failed to update permissions",
+    //     });
+    //   }
+    //   setLoading(false);
+    // };
 
     return (
       <>
@@ -109,7 +106,7 @@ const JoinScreen = forwardRef<HTMLVideoElement, Props>(
           </div>
           <div className="flex-1 flex flex-col gap-3 justify-center items-center">
             <h1 className="text-2xl">Ready to Join ?</h1>
-            <Button disabled={joining || loading} onClick={joinHandler}>
+            <Button disabled={joining} onClick={joinHandler}>
               {joining
                 ? "Joining.."
                 : hostId === user?.id
