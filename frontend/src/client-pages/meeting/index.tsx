@@ -308,7 +308,7 @@ export default function ClientMeeting({
 
     stream.current = _mainStream;
 
-    const ws = new WebSocket(`${wss}/websocket`);
+    const ws = new WebSocket(`${process.env.NEXT_PUBLIC_API_URL}/websocket`);
 
     _pc.onicecandidate = (e) => {
       if (!e.candidate) {
