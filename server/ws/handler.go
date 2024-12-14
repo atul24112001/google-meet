@@ -19,6 +19,22 @@ var upgrader = websocket.Upgrader{
 }
 
 func WebsocketHandler(w http.ResponseWriter, r *http.Request) {
+
+	// redirectTo := r.URL.Query().Get("host")
+	// host := fmt.Sprintf("%s%s", lib.Host, ":8081")
+	// if redirectTo != "" && redirectTo != host {
+	// 	proxy := httputil.NewSingleHostReverseProxy(&url.URL{
+	// 		Scheme: "ws",
+	// 		Host:   host,
+	// 	})
+	// 	r.URL.Host = host
+	// 	r.URL.Scheme = "ws"
+	// 	r.Host = host
+
+	// 	proxy.ServeHTTP(w, r)
+	// 	return
+	// }
+
 	unsafeConn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		logger.Errorf("Failed to upgrade HTTP to Websocket: ", err)

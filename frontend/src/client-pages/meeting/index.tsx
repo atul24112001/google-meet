@@ -276,6 +276,17 @@ export default function ClientMeeting({
 
     const _pc = new RTCPeerConnection({
       iceCandidatePoolSize: 10,
+      iceServers: [
+        {
+          urls: [
+            "stun:stun.l.google.com:19302",
+            "stun:urn.atulmorchhlay.com:3478",
+          ],
+        },
+        {
+          urls: ["turn:urn.atulmorchhlay.com:3478"],
+        },
+      ],
     });
 
     _pc.ontrack = function (event) {

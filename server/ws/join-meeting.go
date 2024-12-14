@@ -12,12 +12,10 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt"
+	// "github.com/gorilla/websocket"
 	"github.com/pion/rtcp"
 	"github.com/pion/webrtc/v4"
 )
-
-// TODO: Should use a queue here for every room
-// var RequestJoinMeetingMap = map[string]JoinMeetingRequest{}
 
 func JoinMeeting(ctx context.Context, conn *threadSafeWriter, message WebsocketMessage) {
 	joinMeetingPayload := &JoinMeetingPayload{}
@@ -25,6 +23,7 @@ func JoinMeeting(ctx context.Context, conn *threadSafeWriter, message WebsocketM
 		logger.Errorf("Failed to unmarshal json to join meeting: %v", err)
 		return
 	}
+
 	claims := &lib.TokenPayload{}
 	token, err := jwt.ParseWithClaims(joinMeetingPayload.Token, claims, (func(t *jwt.Token) (interface{}, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
@@ -111,7 +110,16 @@ func JoinMeetingRequestHandler(ctx context.Context, meetingId string, userId str
 	if !exist {
 		return
 	}
-	peerConnection, err := webrtc.NewPeerConnection(webrtc.Configuration{})
+	peerConnection, err := webrtc.NewPeerConnection(webrtc.Configuration{
+		ICEServers: []webrtc.ICEServer{
+			{
+				URLs: []string{"stun:stun.l.google.com:19302", "stun:urn.atulmorchhlay.com:3478"},
+			},
+			{
+				URLs: []string{"turn:urn.atulmorchhlay.com:3478"},
+			},
+		},
+	})
 	if err != nil {
 		SendMessage(userId, map[string]interface{}{
 			"event":   "error",

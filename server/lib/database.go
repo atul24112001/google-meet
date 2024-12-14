@@ -18,7 +18,6 @@ func ConnectDb(ctx context.Context) {
 	if err != nil {
 		log.Fatal("Error connecting database")
 	}
-
 	options := &redis.Options{
 		Addr:     os.Getenv("REDIS_ADDRESS"),
 		Password: os.Getenv("REDIS_PASSWORD"),
@@ -40,6 +39,5 @@ func ConnectDb(ctx context.Context) {
 			log.Fatal("Error connecting to redis")
 		}
 	}
-
 	log.Println("Connected to PostgreSQL & Redis successfully!")
 }
