@@ -283,9 +283,11 @@ export default function ClientMeeting({
             "stun:urn.atulmorchhlay.com:3478",
           ],
         },
-        {
-          urls: ["turn:urn.atulmorchhlay.com:3478"],
-        },
+        // {
+        //   urls: ["turn:urn.atulmorchhlay.com:3478"],
+        //   username: "",
+        //   credential: ""
+        // },
       ],
     });
 

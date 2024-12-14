@@ -115,9 +115,9 @@ func JoinMeetingRequestHandler(ctx context.Context, meetingId string, userId str
 			{
 				URLs: []string{"stun:stun.l.google.com:19302", "stun:urn.atulmorchhlay.com:3478"},
 			},
-			{
-				URLs: []string{"turn:urn.atulmorchhlay.com:3478"},
-			},
+			// {
+			// 	URLs: []string{"turn:urn.atulmorchhlay.com:3478"},
+			// },
 		},
 	})
 	if err != nil {
