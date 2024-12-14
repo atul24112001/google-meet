@@ -254,16 +254,16 @@ export default function ClientMeeting({
     }
     const _mainStream = new MediaStream();
 
-    if (allow.audio || allow.video) {
-      const _stream = await navigator.mediaDevices.getUserMedia({
-        audio: allow.audio,
-        video: allow.shareScreen ? false : allow.video,
-      });
+    // if (allow.audio || (allow.video && !allow.shareScreen)) {
+    const _stream = await navigator.mediaDevices.getUserMedia({
+      audio: true,
+      video: allow.video && !allow.shareScreen,
+    });
 
-      _stream.getTracks().forEach((track) => {
-        _mainStream.addTrack(track);
-      });
-    }
+    _stream.getTracks().forEach((track) => {
+      _mainStream.addTrack(track);
+    });
+    // }
 
     if (allow.shareScreen) {
       const _screenStream = await navigator.mediaDevices.getDisplayMedia({
@@ -283,11 +283,11 @@ export default function ClientMeeting({
             "stun:urn.atulmorchhlay.com:3478",
           ],
         },
-        // {
-        //   urls: ["turn:urn.atulmorchhlay.com:3478"],
-        //   username: "",
-        //   credential: ""
-        // },
+        {
+          urls: ["turn:urn.atulmorchhlay.com:3478"],
+          username: process.env.NEXT_PUBLIC_TURN_USERNAME,
+          credential: process.env.NEXT_PUBLIC_TURN_PASSWORD,
+        },
       ],
     });
 
