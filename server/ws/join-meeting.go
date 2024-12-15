@@ -113,10 +113,10 @@ func JoinMeetingRequestHandler(ctx context.Context, meetingId string, userId str
 	peerConnection, err := webrtc.NewPeerConnection(webrtc.Configuration{
 		ICEServers: []webrtc.ICEServer{
 			{
-				URLs: []string{"stun:stun.l.google.com:19302", "stun:urn.atulmorchhlay.com:3478"},
+				URLs: []string{"stun:stun.l.google.com:19302", "stun:164.68.103.23:3478"},
 			},
 			{
-				URLs:           []string{"turn:urn.atulmorchhlay.com:3478"},
+				URLs:           []string{"turn:164.68.103.23"},
 				Username:       os.Getenv("TURN_USERNAME"),
 				Credential:     os.Getenv("TURN_PASSWORD"),
 				CredentialType: webrtc.ICECredentialTypePassword,
