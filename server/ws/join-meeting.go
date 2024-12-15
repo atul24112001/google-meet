@@ -130,7 +130,6 @@ func JoinMeetingRequestHandler(ctx context.Context, meetingId string, userId str
 		})
 		return
 	}
-	// defer peerConnection.Close()
 
 	for _, typ := range []webrtc.RTPCodecType{webrtc.RTPCodecTypeVideo, webrtc.RTPCodecTypeAudio} {
 		if _, err := peerConnection.AddTransceiverFromKind(typ, webrtc.RTPTransceiverInit{
@@ -178,7 +177,6 @@ func JoinMeetingRequestHandler(ctx context.Context, meetingId string, userId str
 
 	meeting.ListLock.Lock()
 	meeting.PeerConnections[userId] = &PeerConnectionState{peerConnection, user}
-	// log.Println("userId-PeerConnections", userId, )
 	meeting.ListLock.Unlock()
 
 	peerConnection.OnICECandidate(func(i *webrtc.ICECandidate) {
@@ -270,7 +268,6 @@ func signalPeerConnections(meetingId string, userId string) {
 				}
 			}
 
-			// Don't receive videos we are sending, make sure we don't have loopback
 			for _, receiver := range meeting.PeerConnections[participantId].PeerConnection.GetReceivers() {
 				if receiver.Track() == nil {
 					continue
@@ -279,7 +276,6 @@ func signalPeerConnections(meetingId string, userId string) {
 				existingSenders[receiver.Track().ID()] = true
 			}
 
-			// Add all track we aren't sending yet to the PeerConnection
 			for trackID, _ := range meeting.TrackLocals {
 				if _, ok := existingSenders[trackID]; !ok {
 					if _, err := meeting.PeerConnections[participantId].PeerConnection.AddTrack(meeting.TrackLocals[trackID]); err != nil {
@@ -298,7 +294,6 @@ func signalPeerConnections(meetingId string, userId string) {
 
 	for syncAttempt := 0; ; syncAttempt++ {
 		if syncAttempt == 25 {
-			// Release the lock and attempt a sync in 3 seconds. We might be blocking a RemoveTrack or AddTrack
 			go func() {
 				time.Sleep(time.Second * 3)
 				signalPeerConnections(meetingId, userId)

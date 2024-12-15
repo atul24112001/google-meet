@@ -158,11 +158,12 @@ export default function ClientMeeting({
           setJoinedMeeting(true);
           break;
         case "candidate":
-          if (_pc?.remoteDescription) {
-            _pc?.addIceCandidate(JSON.parse(data)).catch((err) => {
-              console.log(err);
+          _pc?.addIceCandidate(JSON.parse(data)).catch((err) => {
+            toast({
+              title: "Something went wrong",
+              description: "Error while adding ice candidates",
             });
-          }
+          });
           break;
         case "joining-meeting":
           if (user?.id === hostId && !joinedMeeting) {
