@@ -36,6 +36,11 @@ export default function ClientMeeting({
   const [showMessages, setShowMessages] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
 
+  const [processedOffer, setProcessedOffer] = useState(false);
+  const [iceCandidateQueue, setIceCandidateQueue] = useState<RTCIceCandidate[]>(
+    []
+  );
+
   const { user, isAuthenticated } = useAuth();
   const { toast } = useToast();
 
@@ -66,6 +71,26 @@ export default function ClientMeeting({
       });
     }
   }, [user?.id]);
+
+  useEffect(() => {
+    if (processedOffer) {
+      const timeout = setTimeout(() => {
+        iceCandidateQueue.forEach((candidate) => {
+          pc.current?.addIceCandidate(candidate).catch(() => {
+            toast({
+              title: "Something went wrong",
+              description: "Error while adding ice candidates",
+            });
+          });
+        });
+        setIceCandidateQueue([]);
+      }, 1000);
+
+      return () => {
+        clearTimeout(timeout);
+      };
+    }
+  }, [processedOffer, iceCandidateQueue.length]);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -126,7 +151,7 @@ export default function ClientMeeting({
               await pc.current?.setRemoteDescription(JSON.parse(offer));
               const answer = await pc.current?.createAnswer();
               await pc.current?.setLocalDescription(answer);
-
+              setProcessedOffer(true);
               ws.send(
                 JSON.stringify({
                   event: "answer",
@@ -158,11 +183,8 @@ export default function ClientMeeting({
           setJoinedMeeting(true);
           break;
         case "candidate":
-          _pc?.addIceCandidate(JSON.parse(data)).catch(() => {
-            toast({
-              title: "Something went wrong",
-              description: "Error while adding ice candidates",
-            });
+          setIceCandidateQueue((prev) => {
+            return [...prev, JSON.parse(data)];
           });
           break;
         case "joining-meeting":
