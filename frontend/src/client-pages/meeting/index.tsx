@@ -271,6 +271,7 @@ export default function ClientMeeting({
 
   const initiateConnection = async () => {
     setMediaStreams({});
+    setProcessedOffer(false);
     if (stream.current) {
       stream.current.getTracks().forEach((t) => t.stop());
       stream.current = null;
