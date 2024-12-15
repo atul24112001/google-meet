@@ -158,7 +158,7 @@ export default function ClientMeeting({
           setJoinedMeeting(true);
           break;
         case "candidate":
-          _pc?.addIceCandidate(JSON.parse(data)).catch((err) => {
+          _pc?.addIceCandidate(JSON.parse(data)).catch(() => {
             toast({
               title: "Something went wrong",
               description: "Error while adding ice candidates",
