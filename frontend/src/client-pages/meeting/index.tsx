@@ -302,10 +302,14 @@ export default function ClientMeeting({
       iceCandidatePoolSize: 10,
       iceServers: [
         {
-          urls: ["stun:stun.l.google.com:19302", "stun:164.68.103.23:3478"],
+          urls: [
+            "stun:stun.l.google.com:19302",
+            "stun:164.68.103.23:3478",
+            "stun:156.67.111.125:3478",
+          ],
         },
         {
-          urls: ["turn:164.68.103.23"],
+          urls: ["turn:164.68.103.23", "turn:156.67.111.125"],
           username: process.env.NEXT_PUBLIC_TURN_USERNAME,
           credential: process.env.NEXT_PUBLIC_TURN_PASSWORD,
         },
