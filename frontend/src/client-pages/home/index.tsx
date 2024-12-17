@@ -7,9 +7,12 @@ import React, { useState } from "react";
 import { Video } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
+import CircularLoader from "@/components/Loader";
 
 export default function ClientHomePage() {
   const [meetingLink, setMeetingLink] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [joining, setJoining] = useState(false);
 
   const router = useRouter();
   const { toast } = useToast();
@@ -18,6 +21,7 @@ export default function ClientHomePage() {
 
   const joinMeetingHandler = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    setJoining(true);
     const pattern =
       /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/;
     const linkParts = meetingLink.split("/");
@@ -26,6 +30,7 @@ export default function ClientHomePage() {
         title: "Something went wrong",
         description: "Invalid meeting link/code",
       });
+      setJoining(false);
       return;
     }
     const id = linkParts[linkParts.length - 1];
@@ -33,6 +38,7 @@ export default function ClientHomePage() {
   };
 
   const startInstantMeeting = async () => {
+    setCreating(true);
     try {
       const { data } = await apiClient.post("/meet");
       router.push(`/${data.data.meetId}`);
@@ -41,6 +47,7 @@ export default function ClientHomePage() {
         title: "Something went wrong",
         description: (error as Error).message,
       });
+      setCreating(false);
     }
   };
 
@@ -49,6 +56,7 @@ export default function ClientHomePage() {
       {!isAuthenticated && (
         <Button onClick={toggleShowAuthDialog}>Signup/Signin</Button>
       )}
+
       {isAuthenticated && (
         <form
           onSubmit={joinMeetingHandler}
@@ -58,9 +66,9 @@ export default function ClientHomePage() {
             type="button"
             className=" w-full lg:w-fit mb-2 lg:mb-0"
             onClick={startInstantMeeting}
+            disabled={creating}
           >
-            <Video />
-            New meeting
+            {creating ? <CircularLoader /> : <Video />} New meeting
           </Button>
           <div className="flex flex-1 gap-2 items-center">
             <Input
@@ -71,10 +79,10 @@ export default function ClientHomePage() {
             />
             <Button
               type="submit"
-              disabled={!meetingLink.trim()}
+              disabled={!meetingLink.trim() || joining}
               variant="ghost"
             >
-              Join
+              {joining ? <CircularLoader /> : "Join"}
             </Button>
           </div>
         </form>

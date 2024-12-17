@@ -4,6 +4,9 @@ import "./globals.css";
 import Provider from "./provider";
 import { Toaster } from "@/components/ui/toaster";
 import { ThemeProvider } from "@/components/ThemeProvider";
+import { cookies } from "next/headers";
+import axios, { AxiosError } from "axios";
+import { User } from "@prisma/client";
 
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
@@ -22,11 +25,35 @@ export const metadata: Metadata = {
     "Connect, collaborate and celebrate from anywhere with Google meet",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  let authPayload: { data: User; token: string } | null = null;
+  try {
+    const store = await cookies();
+    const token = store.get("token");
+
+    if (token && token.value !== "undefined") {
+      const { data } = await axios.get(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/v1/auth/me`,
+        {
+          headers: {
+            Authorization: `Bearer ${token.value}`,
+          },
+        }
+      );
+      authPayload = data;
+    }
+  } catch (error) {
+    if (error instanceof AxiosError) {
+      console.log(error.response?.data);
+    } else {
+      console.log(error);
+    }
+  }
+
   return (
     <html lang="en" suppressHydrationWarning>
       <body
@@ -38,7 +65,7 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <Provider>
+          <Provider authPayload={authPayload}>
             {children}
             <Toaster />
           </Provider>

@@ -74,15 +74,17 @@ export default function ClientMeeting({
 
   useEffect(() => {
     if (processedOffer) {
-      const timeout = setTimeout(() => {
-        iceCandidateQueue.forEach((candidate) => {
-          pc.current?.addIceCandidate(candidate).catch(() => {
-            toast({
-              title: "Something went wrong",
-              description: "Error while adding ice candidates",
+      const timeout = setTimeout(async () => {
+        await Promise.all(
+          iceCandidateQueue.map((candidate) => {
+            pc.current?.addIceCandidate(candidate).catch(() => {
+              toast({
+                title: "Something went wrong",
+                description: "Error while adding ice candidates",
+              });
             });
-          });
-        });
+          })
+        );
         setIceCandidateQueue([]);
       }, 1000);
 
@@ -149,15 +151,15 @@ export default function ClientMeeting({
                 await _pc?.setLocalDescription({ type: "rollback" });
               }
               await pc.current?.setRemoteDescription(JSON.parse(offer));
-              const answer = await pc.current?.createAnswer();
-              await pc.current?.setLocalDescription(answer);
+              // const answer = await pc.current?.createAnswer();
+              await pc.current?.setLocalDescription();
               setProcessedOffer(true);
               ws.send(
                 JSON.stringify({
                   event: "answer",
                   data: JSON.stringify({
                     meetId,
-                    answer: answer,
+                    answer: pc.current?.localDescription,
                     audio: localStorage.getItem("audio") !== "false",
                     video: localStorage.getItem("video") !== "false",
                   }),
@@ -398,6 +400,9 @@ export default function ClientMeeting({
         }),
       })
     );
+    setTimeout(() => {
+      setJoining(false);
+    }, 2000);
   }
 
   function disconnect() {

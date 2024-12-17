@@ -1,3 +1,4 @@
+import CircularLoader from "@/components/Loader";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/context/AuthContext";
 import Navbar from "@/layout/navbar";
@@ -107,11 +108,13 @@ const JoinScreen = forwardRef<HTMLVideoElement, Props>(
           <div className="flex-1 flex flex-col gap-3 justify-center items-center">
             <h1 className="text-2xl">Ready to Join ?</h1>
             <Button disabled={joining} onClick={joinHandler}>
-              {joining
-                ? "Joining.."
-                : hostId === user?.id
-                ? "Start Meeting"
-                : "Request to join"}
+              {joining ? (
+                <CircularLoader />
+              ) : hostId === user?.id ? (
+                "Start Meeting"
+              ) : (
+                "Request to join"
+              )}
             </Button>
             {/* {hostId === user?.id && (
               <>

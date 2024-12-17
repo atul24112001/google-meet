@@ -1,4 +1,5 @@
 "use client";
+import CircularLoader from "@/components/Loader";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -45,12 +46,15 @@ const AuthContext = createContext<AuthContextTypes>({
   toggleShowAuthDialog: () => {},
 });
 
-export const AuthContextProvider = ({ children }: PropsWithChildren) => {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+export const AuthContextProvider = ({
+  children,
+  authPayload,
+}: PropsWithChildren<Props>) => {
+  const [isAuthenticated, setIsAuthenticated] = useState(!!authPayload);
   const [user, setUser] = useState<null | User>(null);
   const [token, setToken] = useState("");
   const [userExist, setUserExist] = useState<null | boolean>(null);
-  const [, setAuthenticating] = useState(false);
+  const [authenticating, setAuthenticating] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showAuthDialog, setShowAuthDialog] = useState(false);
   const [details, setDetails] = useState({ name: "", email: "", password: "" });
@@ -109,25 +113,8 @@ export const AuthContextProvider = ({ children }: PropsWithChildren) => {
   };
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (token) {
-      (async () => {
-        const success = await tryCatchWrapper(async () => {
-          const { data } = await axios.get(
-            `${process.env.NEXT_PUBLIC_API_URL}/api/v1/auth/me`,
-            {
-              headers: {
-                Authorization: `Bearer ${token}`,
-              },
-            }
-          );
-          data.token = token;
-          authenticateHandler(data);
-        });
-        if (!success) {
-          localStorage.removeItem("token");
-        }
-      })();
+    if (authPayload) {
+      authenticateHandler(authPayload);
     }
   }, []);
 
@@ -259,13 +246,24 @@ export const AuthContextProvider = ({ children }: PropsWithChildren) => {
               </div>
             )}
             <DialogFooter className="mt-3">
-              <Button type="submit">Submit</Button>
+              <Button disabled={authenticating} type="submit">
+                {authenticating && <CircularLoader />}
+                {!authenticating && userExist === null
+                  ? "Submit"
+                  : userExist
+                  ? "Login"
+                  : "Signup"}
+              </Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
     </AuthContext.Provider>
   );
+};
+
+type Props = {
+  authPayload: { data: User; token: string } | null;
 };
 
 export const useAuth = () => useContext(AuthContext);
