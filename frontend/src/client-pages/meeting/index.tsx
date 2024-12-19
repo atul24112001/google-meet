@@ -68,9 +68,13 @@ export default function ClientMeeting({
   }, [joinedMeeting]);
 
   useEffect(() => {
-    if (joinedMeeting && peerConnectionRef.current) {
+    if (
+      joinedMeeting &&
+      peerConnectionRef.current &&
+      peerConnectionRef.current.connectionState === "connected"
+    ) {
       peerConnectionRef.current.onnegotiationneeded = () => {
-        if (peerConnectionRef.current?.connectionState !== "connected") {
+        if (peerConnectionRef.current?.signalingState === "stable") {
           socketRef.current?.send(
             JSON.stringify({
               event: "renegotiate",
@@ -80,7 +84,7 @@ export default function ClientMeeting({
         }
       };
     }
-  }, [joinedMeeting, peerConnectionRef.current]);
+  }, [joinedMeeting, peerConnectionRef.current?.connectionState]);
 
   useLayoutEffect(() => {
     if (hostId === user?.id) {
@@ -345,11 +349,6 @@ export default function ClientMeeting({
         return { ...prev };
       });
     };
-
-    // const _audioTrack = _mainStream.getAudioTracks()[0];
-    // if (_audioTrack) {
-    //   _pc.addTrack(_audioTrack, _mainStream);
-    // }
 
     _mainStream.getTracks().map((track) => {
       _pc.addTrack(track, _mainStream);
