@@ -35,6 +35,7 @@ export default function Navbar() {
           onClick={() => {
             localStorage.removeItem("token");
             deleteCookie("token");
+            window.location.reload();
           }}
         >
           Logout

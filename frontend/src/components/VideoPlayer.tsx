@@ -19,6 +19,15 @@ function VideoPlayer({ stream, id, className, onRemove }: Props) {
       ref={videoRef}
       muted
       autoPlay
+      onPause={() => {
+        console.log("Paused video");
+      }}
+      onLoadStart={() => {
+        console.log("Loading video");
+      }}
+      onLoad={() => {
+        console.log("Loading ends");
+      }}
       controls={false}
     ></video>
   );

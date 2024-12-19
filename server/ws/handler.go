@@ -101,11 +101,11 @@ func WebsocketHandler(w http.ResponseWriter, r *http.Request) {
 			if exist {
 				Renegotiate(r.Context(), userId, message.Data)
 			}
-		case "offer":
-			userId, exist := wsUserMap[c.Conn]
-			if exist {
-				HandleOffer(r.Context(), userId, message.Data)
-			}
+			// case "offer":
+			// 	userId, exist := wsUserMap[c.Conn]
+			// 	if exist {
+			// 		HandleOffer(r.Context(), userId, message.Data)
+			// 	}
 		}
 	}
 }

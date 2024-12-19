@@ -65,7 +65,7 @@ func HashString(str string) string {
 
 func GenerateToken(id string) (string, error) {
 	var JWT_SECRET = []byte(os.Getenv("SECRET"))
-	expirationTime := time.Now().Add(60 * 24 * 30 * time.Minute)
+	expirationTime := time.Now().Add(time.Hour * 24 * 30)
 	claims := &TokenPayload{
 		Id: id,
 		StandardClaims: jwt.StandardClaims{

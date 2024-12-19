@@ -42,6 +42,18 @@ func Signin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// cookie := http.Cookie{
+	// 	Name:     "token",
+	// 	Value:    token,
+	// 	Path:     "/",
+	// 	Domain:   "localhost",
+	// 	HttpOnly: false,
+	// 	Secure:   false,
+	// 	SameSite: http.SameSiteLaxMode,
+	// 	MaxAge:   3600 * 24 * 30,
+	// }
+	// http.SetCookie(w, &cookie)
+
 	lib.WriteJson(w, http.StatusOK, map[string]interface{}{
 		"message": "User signed up successful",
 		"data": map[string]string{

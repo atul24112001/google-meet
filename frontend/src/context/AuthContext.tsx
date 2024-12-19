@@ -14,7 +14,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { User } from "@prisma/client";
 import axios, { AxiosError, AxiosInstance } from "axios";
-import { setCookie } from "cookies-next";
+import { setCookie } from "cookies-next/client";
 import {
   ChangeEvent,
   createContext,
@@ -108,7 +108,11 @@ export const AuthContextProvider = ({
     setIsAuthenticated(true);
     setUser(data.data);
     setToken(data.token);
-    setCookie("token", data.token);
+    if (data.token) {
+      setCookie("token", data.token, {
+        maxAge: 3600 * 24 * 30,
+      });
+    }
     localStorage.setItem("token", data.token);
   };
 

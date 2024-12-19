@@ -9,6 +9,8 @@ import JoinScreen from "./join-screen";
 import MediaPanel from "./media-pannel";
 import { useAuth } from "@/context/AuthContext";
 import MessageBox from "./message-box";
+import { getCookie } from "cookies-next/client";
+import { useRouter } from "next/navigation";
 
 export default function ClientMeeting({
   hostId,
@@ -19,7 +21,10 @@ export default function ClientMeeting({
 }: Props) {
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const stream = useRef<MediaStream | null>(null);
-  const pc = useRef<RTCPeerConnection | null>(null);
+  const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
+  const socketRef = useRef<WebSocket | null>(null);
+
+  const router = useRouter();
 
   const [allow, setAllow] = useState({
     audio: true,
@@ -31,7 +36,7 @@ export default function ClientMeeting({
   const [users, setUsers] = useState<Users>({});
   const [tracksMap, setTracksMap] = useState<TrackMap>({});
 
-  const [socket, setSocket] = useState<WebSocket | null>(null);
+  // const [socket, setSocket] = useState<WebSocket | null>(null);
   const [mediaStreams, setMediaStreams] = useState<MediaStreamMap>({});
   const [showMessages, setShowMessages] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -49,7 +54,7 @@ export default function ClientMeeting({
       return () => {
         try {
           stream.current?.getTracks().forEach((t) => t.stop());
-          socket?.send(
+          socketRef.current?.send(
             JSON.stringify({
               event: "leave",
               data: "",
@@ -61,6 +66,21 @@ export default function ClientMeeting({
       };
     }
   }, [joinedMeeting]);
+
+  useEffect(() => {
+    if (joinedMeeting && peerConnectionRef.current) {
+      peerConnectionRef.current.onnegotiationneeded = () => {
+        if (peerConnectionRef.current?.connectionState !== "connected") {
+          socketRef.current?.send(
+            JSON.stringify({
+              event: "renegotiate",
+              data: meetId,
+            })
+          );
+        }
+      };
+    }
+  }, [joinedMeeting, peerConnectionRef.current]);
 
   useLayoutEffect(() => {
     if (hostId === user?.id) {
@@ -74,17 +94,15 @@ export default function ClientMeeting({
 
   useEffect(() => {
     if (processedOffer) {
-      const timeout = setTimeout(async () => {
-        await Promise.all(
-          iceCandidateQueue.map((candidate) => {
-            pc.current?.addIceCandidate(candidate).catch(() => {
-              toast({
-                title: "Something went wrong",
-                description: "Error while adding ice candidates",
-              });
+      const timeout = setTimeout(() => {
+        iceCandidateQueue.forEach((candidate) => {
+          peerConnectionRef.current?.addIceCandidate(candidate).catch(() => {
+            toast({
+              title: "Something went wrong",
+              description: "Error while adding ice candidates",
             });
-          })
-        );
+          });
+        });
         setIceCandidateQueue([]);
       }, 1000);
 
@@ -97,10 +115,10 @@ export default function ClientMeeting({
   useEffect(() => {
     if (isAuthenticated) {
       (async () => {
-        pc.current = await initiateConnection();
+        peerConnectionRef.current = await initiateConnection();
 
         return () => {
-          pc.current?.close();
+          peerConnectionRef.current?.close();
         };
       })();
     }
@@ -109,15 +127,11 @@ export default function ClientMeeting({
   useEffect(() => {
     if (stream.current) {
       const audioTracks = stream.current.getAudioTracks();
-      const videoTracks = stream.current.getVideoTracks();
       if (audioTracks.length > 0) {
         audioTracks[0].enabled = allow.audio;
       }
-      if (videoTracks.length > 0) {
-        videoTracks[0].enabled = allow.video;
-      }
     }
-  }, [allow.video, allow.audio]);
+  }, [allow.audio, allow.video]);
 
   const handleIncomingMessages = (ws: WebSocket, _pc: RTCPeerConnection) => {
     ws.onmessage = (ev) => {
@@ -150,16 +164,18 @@ export default function ClientMeeting({
                 console.warn("Signaling state not stable. Resetting...");
                 await _pc?.setLocalDescription({ type: "rollback" });
               }
-              await pc.current?.setRemoteDescription(JSON.parse(offer));
-              // const answer = await pc.current?.createAnswer();
-              await pc.current?.setLocalDescription();
+              await peerConnectionRef.current?.setRemoteDescription(
+                JSON.parse(offer)
+              );
+              const answer = await peerConnectionRef.current?.createAnswer();
+              await peerConnectionRef.current?.setLocalDescription(answer);
               setProcessedOffer(true);
               ws.send(
                 JSON.stringify({
                   event: "answer",
                   data: JSON.stringify({
                     meetId,
-                    answer: pc.current?.localDescription,
+                    answer: answer,
                     audio: localStorage.getItem("audio") !== "false",
                     video: localStorage.getItem("video") !== "false",
                   }),
@@ -219,7 +235,7 @@ export default function ClientMeeting({
                 event: "join-meeting",
                 data: JSON.stringify({
                   meetingId: meetId,
-                  token: localStorage.getItem("token"),
+                  token: getCookie("token"),
                 }),
               })
             );
@@ -272,7 +288,6 @@ export default function ClientMeeting({
   };
 
   const initiateConnection = async () => {
-    setMediaStreams({});
     setProcessedOffer(false);
     if (stream.current) {
       stream.current.getTracks().forEach((t) => t.stop());
@@ -289,7 +304,6 @@ export default function ClientMeeting({
     _stream.getTracks().forEach((track) => {
       _mainStream.addTrack(track);
     });
-    // }
 
     if (allow.shareScreen) {
       const _screenStream = await navigator.mediaDevices.getDisplayMedia({
@@ -365,7 +379,7 @@ export default function ClientMeeting({
     };
 
     ws.onopen = () => {
-      setSocket(ws);
+      socketRef.current = ws;
     };
     ws.onclose = function () {
       console.log("Ws closed");
@@ -379,7 +393,7 @@ export default function ClientMeeting({
             event: "join-meeting",
             data: JSON.stringify({
               meetingId: meetId,
-              token: localStorage.getItem("token"),
+              token: getCookie("token"),
             }),
           })
         );
@@ -391,39 +405,37 @@ export default function ClientMeeting({
 
   function joinHandler() {
     setJoining(true);
-    socket?.send(
+    socketRef.current?.send(
       JSON.stringify({
         event: "join-meeting",
         data: JSON.stringify({
           meetingId: meetId,
-          token: localStorage.getItem("token"),
+          token: getCookie("token"),
         }),
       })
     );
-    setTimeout(() => {
-      setJoining(false);
-    }, 2000);
   }
 
   function disconnect() {
     stream.current?.getTracks().forEach((t) => {
       t.stop();
     });
-    pc.current?.close();
-    socket?.send(
+    peerConnectionRef.current?.close();
+    socketRef.current?.send(
       JSON.stringify({
         event: "leave",
         data: "",
       })
     );
-
-    window.location.reload();
+    router.replace("/");
+    router.refresh();
   }
 
   const toggleMessages = () => setShowMessages((prev) => !prev);
 
   const sendMessage = (message: string) => {
-    socket?.send(
+    console.log("text-mesage", socketRef.current);
+    socketRef.current?.send(
       JSON.stringify({
         event: "text-message",
         data: message,

@@ -3,7 +3,6 @@ package ws
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"google-meet/query"
 	"log"
 	"sync"
@@ -12,33 +11,27 @@ import (
 	"github.com/pion/webrtc/v4"
 )
 
-func Renegotiate(ctx context.Context, userId string, payload string) {
-	user, exist := SafeReadFromUsers(userId)
+func Renegotiate(ctx context.Context, userId string, meetingId string) {
+	_, exist := SafeReadFromUsers(userId)
 	if !exist {
+
 		return
 	}
-	var renegotiatePayload RenegotiatePayload
-	if err := json.Unmarshal([]byte(payload), &renegotiatePayload); err != nil {
-		user.WriteJSON(map[string]string{
-			"event":   "error",
-			"message": "Something went wrong while parsing data",
-		})
-		return
+	meeting, meetingExist := connections[meetingId]
+	log.Println("Meeting exist", meetingExist)
+	if meetingExist {
+		meeting.ListLock.Lock()
+		defer func() {
+			meeting.ListLock.Unlock()
+			dispatchKeyFrame(meeting)
+		}()
+		signalPeerConnections(userId, meetingId)
 	}
-	signalPeerConnections(renegotiatePayload.MeetingId, userId)
-	err := Offer(renegotiatePayload.MeetingId, userId)
-	if err != nil {
-		log.Println(err.Error())
-		SendMessage(userId, map[string]string{
-			"event":   "error",
-			"message": "Error while renegotiating",
-		})
-	}
+	// signalPeerConnections(meetingId, userId)
 }
 
 type RenegotiatePayload struct {
-	MeetingId string                    `json:"meetingId"`
-	Offer     webrtc.SessionDescription `json:"offer"`
+	MeetingId string `json:"meetingId"`
 }
 
 type OfferQueue struct {
@@ -89,6 +82,7 @@ func (oq *OfferQueue) ProcessOfferQueue() error {
 }
 
 func Offer(meetingId string, participantId string) error {
+	log.Println("Offering", meetingId, participantId)
 	meeting := connections[meetingId]
 	peerConnection := meeting.PeerConnections[participantId].PeerConnection
 	if peerConnection.SignalingState() != webrtc.SignalingStateStable {
@@ -144,33 +138,79 @@ func Offer(meetingId string, participantId string) error {
 	}
 
 	return nil
-	// meeting.OfferQueue.AddToOfferQueue(func() error {
-
-	// })
-
-	// return processOfferQueueWithRetry(&meeting.OfferQueue)
 }
 
-func processOfferQueueWithRetry(queue *OfferQueue) error {
-	err := queue.ProcessOfferQueue()
-	if err != nil {
-		log.Printf("Error in processing queue: %v. Retrying...", err)
-		return Retry(queue.ProcessOfferQueue, 3, time.Second)
+func signalPeerConnection(participantId string, meetingId string) bool {
+	log.Println("signalling connection", participantId, meetingId)
+	meeting, exist := connections[meetingId]
+	if !exist {
+		return false
 	}
-	return nil
-}
 
-func Retry(fn func() error, attempts int, delay time.Duration) error {
-	for i := 0; i < attempts; i++ {
-		if err := fn(); err != nil {
-			log.Printf("Attempt %d failed: %v", i+1, err)
-			time.Sleep(delay)
+	log.Println("signalling connection 140")
+
+	if meeting.PeerConnections[participantId].PeerConnection.ConnectionState() == webrtc.PeerConnectionStateClosed {
+		return true
+	}
+
+	log.Println("signalling connection 154")
+	existingSenders := map[string]bool{}
+
+	for _, sender := range meeting.PeerConnections[participantId].PeerConnection.GetSenders() {
+		if sender.Track() == nil {
 			continue
 		}
-		return nil
+		existingSenders[sender.Track().ID()] = true
+		if _, ok := meeting.TrackLocals[sender.Track().ID()]; !ok {
+			if err := meeting.PeerConnections[participantId].PeerConnection.RemoveTrack(sender); err != nil {
+				return true
+			}
+		}
 	}
-	return fmt.Errorf("all attempts failed")
+
+	log.Println("signalling connection 169")
+	for _, receiver := range meeting.PeerConnections[participantId].PeerConnection.GetReceivers() {
+		if receiver.Track() == nil {
+			continue
+		}
+
+		existingSenders[receiver.Track().ID()] = true
+	}
+
+	log.Println("signalling connection 178")
+	for trackID, _ := range meeting.TrackLocals {
+		if _, ok := existingSenders[trackID]; !ok {
+			if _, err := meeting.PeerConnections[participantId].PeerConnection.AddTrack(meeting.TrackLocals[trackID]); err != nil {
+				return true
+			}
+		}
+	}
+
+	log.Println("signalling connection 187")
+	err := Offer(meetingId, participantId)
+	return err != nil
 }
+
+// func processOfferQueueWithRetry(queue *OfferQueue) error {
+// 	err := queue.ProcessOfferQueue()
+// 	if err != nil {
+// 		log.Printf("Error in processing queue: %v. Retrying...", err)
+// 		return Retry(queue.ProcessOfferQueue, 3, time.Second)
+// 	}
+// 	return nil
+// }
+
+// func Retry(fn func() error, attempts int, delay time.Duration) error {
+// 	for i := 0; i < attempts; i++ {
+// 		if err := fn(); err != nil {
+// 			log.Printf("Attempt %d failed: %v", i+1, err)
+// 			time.Sleep(delay)
+// 			continue
+// 		}
+// 		return nil
+// 	}
+// 	return fmt.Errorf("all attempts failed")
+// }
 
 // type OfferQueue struct {
 // 	mu    sync.Mutex
