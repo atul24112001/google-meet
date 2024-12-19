@@ -24,7 +24,7 @@ func ConnectDb(ctx context.Context) {
 		DB:       0,
 	}
 
-	options, err = redis.ParseURL(os.Getenv("REDIS_URL"))
+	// options, err = redis.ParseURL(os.Getenv("REDIS_URL"))
 	if err != nil {
 		log.Fatal("Error parsing to redis url")
 	}
